@@ -1,1 +1,2 @@
 vps root password Suff1996Fl01?
+user app password Suff1996Fl01!
