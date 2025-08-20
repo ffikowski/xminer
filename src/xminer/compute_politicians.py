@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 from sqlalchemy import text
 from .db import engine
@@ -18,5 +19,4 @@ def main():
     print("Saved outputs/politicians_with_age.csv")
 
 if __name__ == "__main__":
-    import os
     main()
