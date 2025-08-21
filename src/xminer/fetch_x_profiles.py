@@ -23,7 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ---------- Tweepy client ----------
-client = tweepy.Client(bearer_token=Config.BEARER, wait_on_rate_limit=True)
+client = tweepy.Client(bearer_token=Config.X_BEARER_TOKEN, wait_on_rate_limit=True)
 
 
 def read_usernames(limit: int):
