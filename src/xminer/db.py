@@ -1,3 +1,5 @@
+# src/xminer/db.py
 from sqlalchemy import create_engine
-from .config.config import DATABASE_URL
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+from .config import Config
+
+engine = create_engine(Config.DATABASE_URL, pool_pre_ping=True)
