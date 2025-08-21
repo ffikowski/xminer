@@ -1,5 +1,6 @@
 # src/xminer/params.py
 import os, yaml
+from pathlib import Path
 
 def _load_yaml(path: str) -> dict:
     with open(path, "r") as f:
@@ -8,7 +9,9 @@ def _load_yaml(path: str) -> dict:
 # choose parameters file; allow ENV-specific override
 _loaded = {}
 
-p = "parameters.yml"
+HERE = Path(__file__).resolve().parent
+PARAMS_FILE = HERE / "parameters.yml"
+
 if os.path.exists(p):
     _loaded = _load_yaml(p)
 if not _loaded:
