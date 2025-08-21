@@ -12,8 +12,8 @@ _loaded = {}
 HERE = Path(__file__).resolve().parent
 PARAMS_FILE = HERE / "parameters.yml"
 
-if os.path.exists(p):
-    _loaded = _load_yaml(p)
+if os.path.exists(PARAMS_FILE):
+    _loaded = _load_yaml(PARAMS_FILE)
 if not _loaded:
     raise RuntimeError(f"No parameters file found. Looked for: parameters.yml")
 
