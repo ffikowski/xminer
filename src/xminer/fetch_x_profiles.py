@@ -7,10 +7,10 @@ import tweepy
 from sqlalchemy import text
 
 from .config.config import Config          # secrets: bearer, env
-from .config.params import Params          # non-secrets: log file, sample_limit
-from .db import engine              # shared engine
+from .config.params import Params          # non-secrets: log file, sample_limit, etc.
+from .db import engine                     # shared engine
 
-# logging setup from parameters.yml
+# ---------- Logging (from parameters.yml) ----------
 os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
     level=getattr(logging, Params.logging_level.upper(), logging.INFO),
@@ -25,18 +25,32 @@ logger = logging.getLogger(__name__)
 # ---------- Tweepy client ----------
 client = tweepy.Client(bearer_token=Config.X_BEARER_TOKEN, wait_on_rate_limit=True)
 
+def read_usernames(limit: int | None):
+    if limit is None or limit < 0:
+        q = text("""
+            SELECT username
+            FROM politicians
+            WHERE username IS NOT NULL AND username <> ''
+        """)
+        params = {}
+    else:
+        q = text("""
+            SELECT username
+            FROM politicians
+            WHERE username IS NOT NULL AND username <> ''
+            LIMIT :lim
+        """)
+        params = {"lim": limit}
 
-def read_usernames(limit: int):
-    q = text("""SELECT username FROM politicians
-                WHERE username IS NOT NULL AND username <> '' LIMIT :lim""")
     with engine.begin() as conn:
-        return [r[0].lstrip("@") for r in conn.execute(q, {"lim": limit}).fetchall()]
+        return [str(r[0]).lstrip("@") for r in conn.execute(q, params).fetchall()]
 
-def chunk(lst, n): 
+
+def chunk(lst, n):
     return [lst[i:i+n] for i in range(0, len(lst), n)]
 
 def fetch_batch(usernames):
-    out = []
+    out: List[Dict] = []
     try:
         resp = client.get_users(
             usernames=usernames,
@@ -45,8 +59,11 @@ def fetch_batch(usernames):
         for u in resp.data or []:
             m = u.public_metrics or {}
             out.append({
-                "username": u.username, "x_user_id": int(u.id), "name": u.name,
-                "created_at": u.created_at, "verified": bool(getattr(u,"verified", False)),
+                "username": u.username,
+                "x_user_id": int(u.id),
+                "name": u.name,
+                "created_at": u.created_at,
+                "verified": bool(getattr(u,"verified", False)),
                 "protected": bool(getattr(u,"protected", False)),
                 "followers_count": m.get("followers_count", 0),
                 "following_count": m.get("following_count", 0),
@@ -58,24 +75,84 @@ def fetch_batch(usernames):
             })
         found = {u.username.lower() for u in (resp.data or [])}
         missing = [n for n in usernames if n.lower() not in found]
-        if missing: logger.warning("Not found/suspended: %s", missing)
+        if missing:
+            logger.warning("Not found/suspended: %s", missing)
     except Exception:
         logger.exception("Batch failed for %s", usernames)
     return out
 
+def upsert_x_profiles(df: pd.DataFrame) -> int:
+    """UPSERT rows into x_profiles on (x_user_id). Returns rows written."""
+    if df.empty:
+        return 0
+    # Drop rows without key
+    df = df[df["x_user_id"].notna()].copy()
+    if df.empty:
+        return 0
+
+    # Ensure None instead of NaN for SQL, and proper dtypes
+    df = df.where(pd.notnull(df), None)
+
+    rows = df.to_dict(orient="records")
+    sql = text("""
+        INSERT INTO x_profiles (
+            x_user_id, username, name, created_at, verified, protected,
+            followers_count, following_count, tweet_count, listed_count,
+            location, description, retrieved_at
+        ) VALUES (
+            :x_user_id, :username, :name, :created_at, :verified, :protected,
+            :followers_count, :following_count, :tweet_count, :listed_count,
+            :location, :description, :retrieved_at
+        )
+        ON CONFLICT (x_user_id) DO UPDATE SET
+            username        = EXCLUDED.username,
+            name            = EXCLUDED.name,
+            created_at      = EXCLUDED.created_at,
+            verified        = EXCLUDED.verified,
+            protected       = EXCLUDED.protected,
+            followers_count = EXCLUDED.followers_count,
+            following_count = EXCLUDED.following_count,
+            tweet_count     = EXCLUDED.tweet_count,
+            listed_count    = EXCLUDED.listed_count,
+            location        = EXCLUDED.location,
+            description     = EXCLUDED.description,
+            retrieved_at    = EXCLUDED.retrieved_at;
+    """)
+
+    with engine.begin() as conn:
+        conn.execute(sql, rows)
+    return len(rows)
+
 def main():
-    names = read_usernames(Params.sample_limit)
-    rows = []
+    names = read_usernames(None if Params.sample_limit == -1 else Params.sample_limit)
+
+    rows: List[Dict] = []
     for group in chunk(names, min(Params.chunk_size, 100)):
         rows.extend(fetch_batch(group))
         logger.info("Fetched group=%d rows_total=%d", len(group), len(rows))
 
-    df = pd.DataFrame(rows)
-    os.makedirs("outputs", exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    out_csv = f"outputs/x_profiles_{ts}.csv"
-    df.to_csv(out_csv, index=False)
-    logger.info("Saved %s (rows=%d)", out_csv, len(df))
+    df = pd.DataFrame(rows, columns=[
+        "username","x_user_id","name","created_at","verified","protected",
+        "followers_count","following_count","tweet_count","listed_count",
+        "location","description","retrieved_at"
+    ])
+
+    # (A) Optional CSV on VPS
+    if Params.store_csv:
+        os.makedirs("outputs", exist_ok=True)
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        out_csv = f"outputs/x_profiles_{ts}.csv"
+        df.to_csv(out_csv, index=False)
+        logger.info("Saved %s (rows=%d)", out_csv, len(df))
+    else:
+        logger.info("CSV saving disabled (store_csv=false). Rows=%d", len(df))
+
+    # (B) Optional upsert to Neon
+    if Params.load_to_db:
+        n = upsert_x_profiles(df)
+        logger.info("Upserted %d rows into x_profiles", n)
+    else:
+        logger.info("DB loading disabled (load_to_db=false).")
 
 if __name__ == "__main__":
     main()
