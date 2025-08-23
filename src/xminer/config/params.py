@@ -23,4 +23,4 @@ class Params:
     sample_limit = int(_loaded.get("sample_limit", 50))
     chunk_size = int(_loaded.get("chunk_size", 100))
     load_to_db = bool(_loaded.get("load_to_db", False))
-    store_csv    = bool(cfg.get("store_csv", False))
+    store_csv    = bool(_loaded.get("store_csv", False))
