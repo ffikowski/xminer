@@ -5,3 +5,4 @@ logs/
 .env
 __pycache__/
 outputs/
+secrets.txt
