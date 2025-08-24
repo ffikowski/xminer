@@ -16,7 +16,7 @@ logging.basicConfig(
     level=getattr(logging, Params.logging_level.upper(), logging.INFO),
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler(os.path.join("logs", Params.logging_file)),
+        logging.FileHandler(os.path.join("logs", Params.logging_file), mode="w"),
         logging.StreamHandler(),
     ],
 )
