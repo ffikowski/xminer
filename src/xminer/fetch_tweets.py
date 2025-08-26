@@ -185,8 +185,34 @@ def sleep_from_headers(response) -> None:
 
 
 # ---------- Fetch helpers ----------
+def _refs_to_dict_list(refs):
+    """
+    Convert Tweepy ReferencedTweet objects (or dicts) into a JSON-serializable list of dicts:
+    [{'id': 123, 'type': 'replied_to'}, ...]
+    """
+    if not refs:
+        return None
+    out = []
+    for r in refs:
+        # r might be a Tweepy object (attrs) or already a dict
+        rid = getattr(r, "id", None)
+        rtype = getattr(r, "type", None)
+        if rid is None and isinstance(r, dict):
+            rid = r.get("id")
+            rtype = r.get("type")
+        out.append({"id": int(rid) if rid is not None else None, "type": rtype})
+    return out
+
 def normalize_tweet(t, author_id: int, username: Optional[str]) -> Dict:
     pm = getattr(t, "public_metrics", {}) or {}
+
+    # Entities returned by v2 are already plain dicts (JSON-serializable).
+    entities = getattr(t, "entities", None)
+
+    # Referenced tweets need conversion to plain dicts.
+    refs = getattr(t, "referenced_tweets", None)
+    refs_dicts = _refs_to_dict_list(refs) if refs else None
+
     return {
         "tweet_id": int(t.id),
         "author_id": int(author_id),
@@ -197,16 +223,23 @@ def normalize_tweet(t, author_id: int, username: Optional[str]) -> Dict:
         "conversation_id": getattr(t, "conversation_id", None),
         "in_reply_to_user_id": getattr(t, "in_reply_to_user_id", None),
         "possibly_sensitive": getattr(t, "possibly_sensitive", None),
+
+        # public metrics
         "like_count": pm.get("like_count"),
         "reply_count": pm.get("reply_count"),
         "retweet_count": pm.get("retweet_count"),
         "quote_count": pm.get("quote_count"),
-        # often absent on Basic for others' tweets:
+
+        # often absent on Basic for others' tweets (will be None)
         "bookmark_count": pm.get("bookmark_count"),
         "impression_count": pm.get("impression_count"),
+
         "source": getattr(t, "source", None),
-        "entities": json.dumps(getattr(t, "entities", None)) if getattr(t, "entities", None) else None,
-        "referenced_tweets": json.dumps(getattr(t, "referenced_tweets", None)) if getattr(t, "referenced_tweets", None) else None,
+
+        # your INSERT uses text() into JSONB columns, so dump to JSON strings here
+        "entities": json.dumps(entities) if entities is not None else None,
+        "referenced_tweets": json.dumps(refs_dicts) if refs_dicts is not None else None,
+
         "retrieved_at": datetime.now(timezone.utc),
     }
 
