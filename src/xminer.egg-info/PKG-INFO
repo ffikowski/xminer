@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: xminer
+Version: 0.1
+Summary: Data collector for X profiles
+Author: Your Name
+Requires-Python: >=3.9

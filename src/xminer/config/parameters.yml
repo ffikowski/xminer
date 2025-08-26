@@ -1,5 +1,5 @@
 file: fetch_x_profiles.log
-sample_limit: 100
+sample_limit: 3
 chunk_size: 100
 load_to_db: true
 store_csv: false
