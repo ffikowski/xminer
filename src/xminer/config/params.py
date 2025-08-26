@@ -24,3 +24,6 @@ class Params:
     chunk_size = int(_loaded.get("chunk_size", 100))
     load_to_db = bool(_loaded.get("load_to_db", False))
     store_csv    = bool(_loaded.get("store_csv", False))
+    # NEW:
+    tweets_sample_limit = int(_loaded.get("tweets_sample_limit", _loaded.get("sample_limit", -1)))
+    sample_seed = _loaded.get("sample_seed", None)

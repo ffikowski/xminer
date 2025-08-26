@@ -40,6 +40,7 @@ import os
 import json
 import time
 import logging
+import random
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -48,6 +49,7 @@ import tweepy
 from sqlalchemy import text
 
 from .config.config import Config
+from .config.params import Params
 from .db import engine
 
 # ---------- Logging ----------
@@ -228,8 +230,22 @@ def fetch_since_pages(author_id: int, since_id: int):
 # ---------- Main ----------
 def main():
     profiles = get_all_profiles()
+    total_available = len(profiles)
+
+    # sampling
+    n = int(Params.tweets_sample_limit)
+    if n >= 0:
+        if Params.sample_seed is not None:
+            random.seed(int(Params.sample_seed))
+        n = min(n, total_available)
+        profiles = random.sample(profiles, n)
+
     total_profiles = len(profiles)
-    logger.info("Starting tweets fetch for %d profiles", total_profiles)
+    logger.info(
+        "Starting tweets fetch: selected %d profiles (out of %d available). sample_limit=%s seed=%s",
+        total_profiles, total_available, Params.tweets_sample_limit, Params.sample_seed
+    )
+
 
     total_upserts = 0
     processed = 0
@@ -264,6 +280,9 @@ def main():
                 # Incremental: paginate since last_id
                 new_rows: List[Dict] = []
                 paginator = fetch_since_pages(aid, last_id)
+
+                page_count = 0
+                tweet_count = 0
 
                 for page in paginator:
                     page_count += 1

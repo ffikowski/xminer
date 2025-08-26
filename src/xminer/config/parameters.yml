@@ -3,3 +3,5 @@ sample_limit: 3
 chunk_size: 100
 load_to_db: true
 store_csv: false
+tweets_sample_limit: 1    # -1 => all, or set e.g. 200
+sample_seed: 42
