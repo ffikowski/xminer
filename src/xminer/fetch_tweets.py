@@ -266,6 +266,11 @@ def main():
                 paginator = fetch_since_pages(aid, last_id)
 
                 for page in paginator:
+                    page_count += 1
+                    n = len(page.data) if page.data else 0
+                    tweet_count += n
+                    logger.info("Author %s (%s): fetched page %d with %d tweets (total %d so far)", 
+                                uname, aid, page_count, n, tweet_count)
                     if page.data:
                         for t in page.data:
                             new_rows.append(normalize_tweet(t, aid, uname))
