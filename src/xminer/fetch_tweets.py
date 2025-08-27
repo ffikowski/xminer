@@ -87,6 +87,13 @@ TWEET_FIELDS = [
 # Default sleep if headers aren’t present (approx 15 minutes)
 DEFAULT_RATE_LIMIT_SLEEP = 15 * 60 + 1  # 901 sec
 
+# --- new helper: parse Params.tweets_since into aware UTC datetime
+def _get_start_time_from_params():
+    val = getattr(Params, "tweets_since", None)
+    if not val:
+        return None
+    dt = pd.to_datetime(val, utc=True)  # accepts "2025-01-01" or RFC3339
+    return dt.to_pydatetime()
 
 # ---------- DB helpers ----------
 def get_all_profiles() -> List[Dict]:
@@ -243,11 +250,15 @@ def normalize_tweet(t, author_id: int, username: Optional[str]) -> Dict:
         "retrieved_at": datetime.now(timezone.utc),
     }
 
-def fetch_last_100(author_id: int):
+def fetch_last_100(author_id: int, start_time=None):
+    kwargs = {}
+    if start_time is not None:
+        kwargs["start_time"] = start_time
     return client.get_users_tweets(
         id=author_id,
         max_results=100,
-        tweet_fields=TWEET_FIELDS
+        tweet_fields=TWEET_FIELDS,
+        **kwargs
     )
 
 def fetch_since_pages(author_id: int, since_id: int):
@@ -264,7 +275,7 @@ def fetch_since_pages(author_id: int, since_id: int):
 def main():
     profiles = get_all_profiles()
     total_available = len(profiles)
-
+    start_time = _get_start_time_from_params()
     # sampling
     n = int(Params.tweets_sample_limit)
     if n >= 0:
@@ -299,7 +310,7 @@ def main():
                 # Initial: just one call for last 100
                 while True:
                     try:
-                        resp = fetch_last_100(aid)
+                        resp = fetch_last_100(aid, start_time=start_time)
                         break
                     except tweepy.TooManyRequests as e:
                         sleep_from_headers(getattr(e, "response", None))
@@ -307,7 +318,11 @@ def main():
                 rows = [normalize_tweet(t, aid, uname) for t in tweets]
                 n = upsert_tweets(rows)
                 total_upserts += n
-                logger.info("Initial fetch: upserted %d tweets for %s", n, uname)
+                logger.info(
+                    "Initial fetch%s: upserted %d tweets for %s",
+                    f" since {start_time.isoformat()}" if start_time else "",
+                    n, uname
+                )
 
             else:
                 # Incremental: paginate since last_id

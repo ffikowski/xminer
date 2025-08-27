@@ -27,3 +27,4 @@ class Params:
     # NEW:
     tweets_sample_limit = int(_loaded.get("tweets_sample_limit", _loaded.get("sample_limit", -1)))
     sample_seed = _loaded.get("sample_seed", None)
+    tweets_since = _loaded.get("tweets_since", None)

@@ -11,6 +11,7 @@ import argparse
 import os
 import sys
 import gzip
+import csv
 from typing import Optional
 
 import pandas as pd
@@ -62,7 +63,12 @@ def write_csv_iter(conn, sql: str, out_path: str, chunksize: int, header: bool, 
     first = True
     with opener(out_path, mode, encoding="utf-8", newline="") as f:
         for chunk in pd.read_sql(text(sql), conn, chunksize=chunksize):
-            chunk.to_csv(f, index=False, header=(header and first))
+            chunk.to_csv(
+                f,
+                index=False,
+                header=(header and first),
+                quoting=csv.QUOTE_ALL  # 👈 ensures tweets with \n are wrapped in quotes
+            )
             first = False
 
 
