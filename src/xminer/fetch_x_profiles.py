@@ -37,7 +37,7 @@ def read_usernames(limit: int | None):
         q = text("""
             SELECT username
             FROM politicians
-            WHERE username IS NOT NULL AND username <> ''
+            WHERE username IS NOT NULL AND username <> '' AND username <> 'gelöscht'
             LIMIT :lim
         """)
         params = {"lim": limit}
