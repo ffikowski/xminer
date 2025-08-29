@@ -119,23 +119,19 @@ def get_latest_tweet_id(author_id: int) -> Optional[int]:
         return int(row[0]) if row else None
 
 def _coerce_int_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Use Params.id_cols / Params.count_cols (from parameters.yml) to coerce
-    integer-like columns to safe Python ints (or None) before DB insert.
-    """
     if df.empty:
         return df
 
-    # 1) coerce numeric-ish columns to pandas nullable Int64
+    # 1) numeric-ish -> pandas nullable Int64
     for col in (set(Params.id_cols + Params.count_cols) & set(df.columns)):
         df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
 
-    # 2) pandas <NA> -> None (so psycopg2 sends NULL)
+    # 2) replace NA with None for DB NULLs
     df = df.where(df.notnull(), None)
 
-    # 3) enforce true Python ints for ID columns (prevents 1.23e+18 float issues)
+    # 3) ensure true Python ints specifically for ID columns (no 1.23e+18 floats)
     for col in (set(Params.id_cols) & set(df.columns)):
-        df[col] = df[col].apply(lambda x: int(x) if x is not None else None)
+        df[col] = df[col].apply(lambda x: int(x) if pd.notna(x) else None)
 
     return df
 
