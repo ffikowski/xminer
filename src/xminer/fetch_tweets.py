@@ -41,7 +41,7 @@ import json
 import time
 import logging
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
 
 import pandas as pd
@@ -118,13 +118,37 @@ def get_latest_tweet_id(author_id: int) -> Optional[int]:
         row = conn.execute(sql, {"aid": author_id}).fetchone()
         return int(row[0]) if row else None
 
+def _coerce_int_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Use Params.id_cols / Params.count_cols (from parameters.yml) to coerce
+    integer-like columns to safe Python ints (or None) before DB insert.
+    """
+    if df.empty:
+        return df
+
+    # 1) coerce numeric-ish columns to pandas nullable Int64
+    for col in (set(Params.id_cols + Params.count_cols) & set(df.columns)):
+        df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+
+    # 2) pandas <NA> -> None (so psycopg2 sends NULL)
+    df = df.where(df.notnull(), None)
+
+    # 3) enforce true Python ints for ID columns (prevents 1.23e+18 float issues)
+    for col in (set(Params.id_cols) & set(df.columns)):
+        df[col] = df[col].apply(lambda x: int(x) if x is not None else None)
+
+    return df
+
+
 def upsert_tweets(rows: List[Dict]) -> int:
     if not rows:
         return 0
     df = pd.DataFrame(rows)
     if df.empty:
         return 0
-    df = df.where(pd.notnull(df), None)
+
+    # NEW: normalize integer-like columns based on parameters.yml
+    df = _coerce_int_columns(df)
 
     sql = text("""
         INSERT INTO tweets (
@@ -163,6 +187,7 @@ def upsert_tweets(rows: List[Dict]) -> int:
     with engine.begin() as conn:
         conn.execute(sql, df.to_dict(orient="records"))
     return len(df)
+
 
 
 # ---------- Rate limit helper ----------
@@ -270,6 +295,25 @@ def fetch_since_pages(author_id: int, since_id: int):
         tweet_fields=TWEET_FIELDS
     )
 
+def author_already_fetched_on(author_id: int) -> bool:
+    """
+    Return True if tweets for this author were already written on the given UTC day.
+    """
+    day_start = Params.skip_fetch_date
+    day_end = day_start + timedelta(days=1)
+    sql = text("""
+        SELECT 1
+        FROM tweets
+        WHERE author_id = :aid
+          AND retrieved_at >= :start_ts
+          AND retrieved_at <  :end_ts
+        LIMIT 1
+    """)
+    with engine.begin() as conn:
+        row = conn.execute(sql, {"aid": author_id, "start_ts": day_start, "end_ts": day_end}).fetchone()
+        return row is not None
+
+
 
 # ---------- Main ----------
 def main():
@@ -299,6 +343,10 @@ def main():
         remaining = total_profiles - processed
         aid = p["author_id"]
         uname = p["username"]
+
+        if author_already_fetched_on(aid):
+            logger.info("Skipping %s (%s): already fetched on 2025-08-28.", uname, aid)
+            continue
 
         logger.info("Profile %d/%d (remaining %d): %s (%s)",
                     processed, total_profiles, remaining, uname, aid)

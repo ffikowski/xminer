@@ -1,6 +1,7 @@
 # src/xminer/params.py
 import os, yaml
 from pathlib import Path
+from datetime import datetime, timezone
 
 def _load_yaml(path: str) -> dict:
     with open(path, "r") as f:
@@ -28,3 +29,13 @@ class Params:
     tweets_sample_limit = int(_loaded.get("tweets_sample_limit", _loaded.get("sample_limit", -1)))
     sample_seed = _loaded.get("sample_seed", None)
     tweets_since = _loaded.get("tweets_since", None)
+
+    id_cols = _loaded.get("id_cols", [
+        "tweet_id","author_id","conversation_id","in_reply_to_user_id"
+    ])
+
+    count_cols = _loaded.get("count_cols", [
+        "like_count","reply_count","retweet_count",
+        "quote_count","bookmark_count","impression_count"
+    ])
+    skip_fetch_date = datetime.fromisoformat(_loaded.get("skip_fetch_date")).replace(tzinfo=timezone.utc)

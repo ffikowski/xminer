@@ -3,6 +3,19 @@ sample_limit: -1
 chunk_size: 100
 load_to_db: true
 store_csv: false
-tweets_sample_limit: 100    # -1 => all, or set e.g. 200
+tweets_sample_limit: 10    # -1 => all, or set e.g. 200
 sample_seed: 42
 tweets_since: "2025-08-01"
+id_cols:
+  - tweet_id
+  - author_id
+  - conversation_id
+  - in_reply_to_user_id
+count_cols:
+  - like_count
+  - reply_count
+  - retweet_count
+  - quote_count
+  - bookmark_count
+  - impression_count
+skip_fetch_date: "2025-08-28"
