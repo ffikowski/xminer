@@ -335,6 +335,8 @@ def main():
         n = min(n, total_available)
         profiles = random.sample(profiles, n)
 
+    profiles = [p for p in profiles if p["author_id"] == 809895794]
+
     total_profiles = len(profiles)
     logger.info(
         "Starting tweets fetch: selected %d profiles (out of %d available). sample_limit=%s seed=%s",
@@ -345,7 +347,7 @@ def main():
     total_upserts = 0
     processed = 0
 
-    for p in [809895794]:# profiles:
+    for p in profiles:
         processed += 1
         remaining = total_profiles - processed
         aid = p["author_id"]
