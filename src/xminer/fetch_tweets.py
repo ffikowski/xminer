@@ -138,6 +138,8 @@ def _coerce_int_columns(df: pd.DataFrame) -> pd.DataFrame:
     # 3) Global NA -> None (for non-numeric fields too)
     df = df.where(df.notnull(), None)
 
+
+
     return df
 
 
@@ -145,20 +147,89 @@ def _coerce_int_columns(df: pd.DataFrame) -> pd.DataFrame:
 def upsert_tweets(rows: list[dict]) -> int:
     if not rows:
         return 0
-    df = pd.DataFrame(rows)
-    if df.empty:
-        return 0
 
-    # Only coerce numeric counters; also turn NaN -> None globally
-    df = _coerce_int_columns(df)
-
-    # IMPORTANT: convert JSON strings to Python objects for JSONB bind
-    for col in ("entities", "referenced_tweets"):
-        if col in df.columns:
-            df[col] = df[col].apply(lambda v: json.loads(v) if isinstance(v, str) else v)
-
+    import math, json
     from sqlalchemy import text, bindparam, BigInteger, Text, JSON
+    from datetime import datetime, timezone
 
+    # helpers
+    def _to_int_or_none(v):
+        if v is None:
+            return None
+        # catch pandas/np NaN or float('nan')
+        try:
+            if isinstance(v, float) and math.isnan(v):
+                return None
+        except Exception:
+            pass
+        try:
+            return int(v)
+        except Exception:
+            return None
+
+    def _to_json_obj(v):
+        if v is None:
+            return None
+        if v == "" or v == "null":
+            return None
+        if isinstance(v, (dict, list)):
+            return v
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except Exception:
+                # if it’s not valid JSON, store as text field instead (but our schema expects JSONB)
+                return None
+        return None
+
+    def _to_dt(v):
+        # Tweepy gives datetime already; if string, try parse ISO
+        if isinstance(v, datetime):
+            return v
+        if v is None:
+            return datetime.now(timezone.utc)
+        try:
+            # pandas Timestamp prints in logs, but is a datetime subclass anyway
+            return pd.to_datetime(v, utc=True).to_pydatetime()
+        except Exception:
+            return datetime.now(timezone.utc)
+
+    # sanitize each row without pandas
+    records = []
+    for r in rows:
+        rec = {}
+
+        # TEXT ids (you changed these columns to text)
+        rec["tweet_id"]        = str(r.get("tweet_id")) if r.get("tweet_id") is not None else None
+        rec["conversation_id"] = str(r.get("conversation_id")) if r.get("conversation_id") is not None else None
+
+        # BIGINT ids
+        rec["author_id"]           = _to_int_or_none(r.get("author_id"))
+        rec["in_reply_to_user_id"] = _to_int_or_none(r.get("in_reply_to_user_id"))
+
+        # other fields
+        rec["username"]           = r.get("username")
+        rec["created_at"]         = _to_dt(r.get("created_at"))
+        rec["text"]               = r.get("text")
+        rec["lang"]               = r.get("lang")
+        rec["possibly_sensitive"] = r.get("possibly_sensitive")
+
+        # BIGINT counters
+        rec["like_count"]        = _to_int_or_none(r.get("like_count"))
+        rec["reply_count"]       = _to_int_or_none(r.get("reply_count"))
+        rec["retweet_count"]     = _to_int_or_none(r.get("retweet_count"))
+        rec["quote_count"]       = _to_int_or_none(r.get("quote_count"))
+        rec["bookmark_count"]    = _to_int_or_none(r.get("bookmark_count"))
+        rec["impression_count"]  = _to_int_or_none(r.get("impression_count"))
+
+        rec["source"]             = r.get("source")
+        rec["entities"]           = _to_json_obj(r.get("entities"))
+        rec["referenced_tweets"]  = _to_json_obj(r.get("referenced_tweets"))
+        rec["retrieved_at"]       = _to_dt(r.get("retrieved_at"))
+
+        records.append(rec)
+
+    # statement with explicit types (matches your table)
     stmt = text("""
         INSERT INTO tweets (
             tweet_id, author_id, username, created_at, text, lang,
@@ -196,7 +267,7 @@ def upsert_tweets(rows: list[dict]) -> int:
         bindparam("tweet_id",            type_=Text()),
         bindparam("author_id",           type_=BigInteger()),
         bindparam("username",            type_=Text()),
-        bindparam("created_at"),  # TIMESTAMPTZ adapts fine
+        bindparam("created_at"),
         bindparam("text",                type_=Text()),
         bindparam("lang",                type_=Text()),
         bindparam("conversation_id",     type_=Text()),
@@ -215,9 +286,10 @@ def upsert_tweets(rows: list[dict]) -> int:
     )
 
     with engine.begin() as conn:
-        conn.execute(stmt, df.to_dict(orient="records"))
+        conn.execute(stmt, records)
 
-    return len(df)
+    return len(records)
+
 
 
 
