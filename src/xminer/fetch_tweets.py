@@ -58,7 +58,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler(os.path.join("logs", "fetch_tweets.log")),
+        logging.FileHandler(os.path.join("logs", "fetch_tweets.log"), mode="w"),
         logging.StreamHandler(),
     ],
 )
