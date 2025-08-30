@@ -122,18 +122,14 @@ def _coerce_int_columns(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
-    # 1) numeric-ish -> pandas nullable Int64
-    for col in (set(Params.id_cols + Params.count_cols) & set(df.columns)):
+    # only numeric counters; IDs are text or nullable ints depending on schema
+    for col in (set(Params.count_cols) & set(df.columns)):
         df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
 
-    # 2) replace NA with None for DB NULLs
+    # convert pandas NA to None so DB sees NULL
     df = df.where(df.notnull(), None)
-
-    # 3) ensure true Python ints specifically for ID columns (no 1.23e+18 floats)
-    for col in (set(Params.id_cols) & set(df.columns)):
-        df[col] = df[col].apply(lambda x: int(x) if pd.notna(x) else None)
-
     return df
+
 
 def upsert_tweets(rows: list[dict]) -> int:
     if not rows:
@@ -142,9 +138,17 @@ def upsert_tweets(rows: list[dict]) -> int:
     if df.empty:
         return 0
 
+    # Only coerce numeric counters; also turn NaN -> None globally
     df = _coerce_int_columns(df)
 
-    sql = text("""
+    # IMPORTANT: convert JSON strings to Python objects for JSONB bind
+    for col in ("entities", "referenced_tweets"):
+        if col in df.columns:
+            df[col] = df[col].apply(lambda v: json.loads(v) if isinstance(v, str) else v)
+
+    from sqlalchemy import text, bindparam, BigInteger, Text, JSON
+
+    stmt = text("""
         INSERT INTO tweets (
             tweet_id, author_id, username, created_at, text, lang,
             conversation_id, in_reply_to_user_id, possibly_sensitive,
@@ -177,22 +181,34 @@ def upsert_tweets(rows: list[dict]) -> int:
             entities             = EXCLUDED.entities,
             referenced_tweets    = EXCLUDED.referenced_tweets,
             retrieved_at         = EXCLUDED.retrieved_at
-    """)
+    """).bindparams(
+        bindparam("tweet_id",            type_=Text()),
+        bindparam("author_id",           type_=BigInteger()),
+        bindparam("username",            type_=Text()),
+        bindparam("created_at"),  # TIMESTAMPTZ adapts fine
+        bindparam("text",                type_=Text()),
+        bindparam("lang",                type_=Text()),
+        bindparam("conversation_id",     type_=Text()),
+        bindparam("in_reply_to_user_id", type_=BigInteger()),
+        bindparam("possibly_sensitive"),
+        bindparam("like_count",          type_=BigInteger()),
+        bindparam("reply_count",         type_=BigInteger()),
+        bindparam("retweet_count",       type_=BigInteger()),
+        bindparam("quote_count",         type_=BigInteger()),
+        bindparam("bookmark_count",      type_=BigInteger()),
+        bindparam("impression_count",    type_=BigInteger()),
+        bindparam("source",              type_=Text()),
+        bindparam("entities",            type_=JSON()),
+        bindparam("referenced_tweets",   type_=JSON()),
+        bindparam("retrieved_at"),
+    )
 
-    try:
-        with engine.begin() as conn:
-            conn.execute(sql, df.to_dict(orient="records"))
-        return len(df)
-    except Exception:
-        # find the offending record
-        for rec in df.to_dict(orient="records"):
-            try:
-                with engine.begin() as conn:
-                    conn.execute(sql, [rec])
-            except Exception as e2:
-                logger.exception("Offending row for bigint: %r", rec)
-                raise
-        raise
+    with engine.begin() as conn:
+        conn.execute(stmt, df.to_dict(orient="records"))
+
+    return len(df)
+
+
 
 
 
