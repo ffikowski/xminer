@@ -3,11 +3,10 @@ import json
 from datetime import datetime, timezone
 from sqlalchemy import create_engine, text, BigInteger, Integer, Text, JSON, bindparam
 
-# 1) engine
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise SystemExit("Set DATABASE_URL in env first")
-engine = create_engine(DATABASE_URL, future=True)
+from .config.config import Config
+from .config.params import Params
+from .db import engine
+
 
 # 2) the exact row you logged
 row = {
