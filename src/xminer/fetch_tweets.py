@@ -135,15 +135,13 @@ def _coerce_int_columns(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-
-def upsert_tweets(rows: List[Dict]) -> int:
+def upsert_tweets(rows: list[dict]) -> int:
     if not rows:
         return 0
     df = pd.DataFrame(rows)
     if df.empty:
         return 0
 
-    # NEW: normalize integer-like columns based on parameters.yml
     df = _coerce_int_columns(df)
 
     sql = text("""
@@ -180,9 +178,22 @@ def upsert_tweets(rows: List[Dict]) -> int:
             referenced_tweets    = EXCLUDED.referenced_tweets,
             retrieved_at         = EXCLUDED.retrieved_at
     """)
-    with engine.begin() as conn:
-        conn.execute(sql, df.to_dict(orient="records"))
-    return len(df)
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(sql, df.to_dict(orient="records"))
+        return len(df)
+    except Exception:
+        # find the offending record
+        for rec in df.to_dict(orient="records"):
+            try:
+                with engine.begin() as conn:
+                    conn.execute(sql, [rec])
+            except Exception as e2:
+                logger.exception("Offending row for bigint: %r", rec)
+                raise
+        raise
+
 
 
 
@@ -334,7 +345,7 @@ def main():
     total_upserts = 0
     processed = 0
 
-    for p in profiles:
+    for p in [809895794]:# profiles:
         processed += 1
         remaining = total_profiles - processed
         aid = p["author_id"]
