@@ -1,115 +1,50 @@
 # src/xminer/fetch_tweets.py
-"""
-Tweets fetcher (no media) with explicit 15-min rate-limit sleeps + progress logging.
-
-Run:
-    python -m xminer.fetch_tweets
-
-Prereqs:
-    - Config.X_BEARER_TOKEN set (like in your profiles script)
-    - DB engine available via xminer.db.engine
-    - Create table once:
-
-    CREATE TABLE IF NOT EXISTS tweets (
-      tweet_id             BIGINT PRIMARY KEY,
-      author_id            BIGINT NOT NULL,
-      username             TEXT,
-      created_at           TIMESTAMPTZ NOT NULL,
-      text                 TEXT,
-      lang                 TEXT,
-      conversation_id      BIGINT,
-      in_reply_to_user_id  BIGINT,
-      possibly_sensitive   BOOLEAN,
-      like_count           INTEGER,
-      reply_count          INTEGER,
-      retweet_count        INTEGER,
-      quote_count          INTEGER,
-      bookmark_count       INTEGER,
-      impression_count     INTEGER,
-      source               TEXT,
-      entities             JSONB,
-      referenced_tweets    JSONB,
-      retrieved_at         TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-
-    CREATE INDEX IF NOT EXISTS tweets_author_created_idx
-      ON tweets (author_id, created_at DESC);
-"""
-
-import os
-import json
-import time
-import logging
-import random
+import os, time, logging, random, json
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
 
-import pandas as pd
 import tweepy
 from sqlalchemy import text
 
 from .config.config import Config
 from .config.params import Params
 from .db import engine
+from .ingest_helpers import sanitize_rows, INSERT_TWEETS_STMT
 
-# ---------- Logging ----------
+# ---------- logging ----------
 os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(os.path.join("logs", "fetch_tweets.log"), mode="w"),
-        logging.StreamHandler(),
-    ],
+    handlers=[logging.FileHandler("logs/fetch_tweets.log", mode="w"),
+              logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
-# ---------- Tweepy client ----------
-# We want to manage sleeping ourselves to log it clearly:
-client = tweepy.Client(
-    bearer_token=Config.X_BEARER_TOKEN,
-    wait_on_rate_limit=False  # manual handling so we can log sleeps
-)
-
-# Only text/metrics/metadata (NO media)
+# ---------- client ----------
+client = tweepy.Client(bearer_token=Config.X_BEARER_TOKEN, wait_on_rate_limit=False)
 TWEET_FIELDS = [
-    "created_at",
-    "lang",
-    "public_metrics",
-    "conversation_id",
-    "in_reply_to_user_id",
-    "possibly_sensitive",
-    "source",
-    "entities",
-    "referenced_tweets",
+    "created_at","lang","public_metrics","conversation_id","in_reply_to_user_id",
+    "possibly_sensitive","source","entities","referenced_tweets",
 ]
+DEFAULT_RATE_LIMIT_SLEEP = 901
 
-# Default sleep if headers aren’t present (approx 15 minutes)
-DEFAULT_RATE_LIMIT_SLEEP = 15 * 60 + 1  # 901 sec
-
-# --- new helper: parse Params.tweets_since into aware UTC datetime
-def _get_start_time_from_params():
+def _start_time():
     val = getattr(Params, "tweets_since", None)
     if not val:
         return None
-    dt = pd.to_datetime(val, utc=True)  # accepts "2025-01-01" or RFC3339
-    return dt.to_pydatetime()
+    # assume isoformat with Z/offset provided upstream; tweepy wants aware dt
+    return datetime.fromisoformat(val.replace("Z","+00:00"))
 
-# ---------- DB helpers ----------
+# ---------- db ----------
 def get_all_profiles() -> List[Dict]:
-    sql = text("""
-        SELECT x_user_id, username
-        FROM x_profiles
-        WHERE x_user_id IS NOT NULL
-        ORDER BY x_user_id
-    """)
+    sql = text("SELECT x_user_id, username FROM x_profiles WHERE x_user_id IS NOT NULL ORDER BY x_user_id")
     with engine.begin() as conn:
         return [{"author_id": int(r[0]), "username": r[1]} for r in conn.execute(sql).fetchall()]
 
-def get_latest_tweet_id(author_id: int) -> Optional[int]:
+def get_latest_tweet_id(author_id: int) -> Optional[str]:
     sql = text("""
-        SELECT tweet_id
-        FROM tweets
+        SELECT tweet_id FROM tweets
         WHERE author_id = :aid
         ORDER BY created_at DESC
         LIMIT 1
@@ -118,298 +53,13 @@ def get_latest_tweet_id(author_id: int) -> Optional[int]:
         row = conn.execute(sql, {"aid": author_id}).fetchone()
         return str(row[0]) if row else None
 
-def _coerce_int_columns(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return df
-
-    # 1) Coerce numeric counters (stay BIGINT in DB)
-    count_cols = set(Params.count_cols) & set(df.columns)
-    for col in count_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
-
-    # 2) Coerce the remaining BIGINT ID columns (not text ones!)
-    #    You said only tweet_id and conversation_id are TEXT now.
-    for col in ["author_id", "in_reply_to_user_id"]:
-        if col in df.columns:
-            # make numeric (nullable), then Python int/None
-            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
-            df[col] = df[col].apply(lambda x: int(x) if pd.notna(x) else None)
-
-    # 3) Global NA -> None (for non-numeric fields too)
-    df = df.where(df.notnull(), None)
-
-
-
-    return df
-
-
-
-def upsert_tweets(rows: list[dict]) -> int:
-    if not rows:
-        return 0
-
-    import math, json
-    from sqlalchemy import text, bindparam, BigInteger, Text, JSON
-    from datetime import datetime, timezone
-
-    # helpers
-    def _to_int_or_none(v):
-        if v is None:
-            return None
-        # catch pandas/np NaN or float('nan')
-        try:
-            if isinstance(v, float) and math.isnan(v):
-                return None
-        except Exception:
-            pass
-        try:
-            return int(v)
-        except Exception:
-            return None
-
-    def _to_json_obj(v):
-        if v is None:
-            return None
-        if v == "" or v == "null":
-            return None
-        if isinstance(v, (dict, list)):
-            return v
-        if isinstance(v, str):
-            try:
-                return json.loads(v)
-            except Exception:
-                # if it’s not valid JSON, store as text field instead (but our schema expects JSONB)
-                return None
-        return None
-
-    def _to_dt(v):
-        # Tweepy gives datetime already; if string, try parse ISO
-        if isinstance(v, datetime):
-            return v
-        if v is None:
-            return datetime.now(timezone.utc)
-        try:
-            # pandas Timestamp prints in logs, but is a datetime subclass anyway
-            return pd.to_datetime(v, utc=True).to_pydatetime()
-        except Exception:
-            return datetime.now(timezone.utc)
-
-    # sanitize each row without pandas
-    records = []
-    for r in rows:
-        rec = {}
-
-        # TEXT ids (you changed these columns to text)
-        rec["tweet_id"]        = str(r.get("tweet_id")) if r.get("tweet_id") is not None else None
-        rec["conversation_id"] = str(r.get("conversation_id")) if r.get("conversation_id") is not None else None
-
-        # BIGINT ids
-        rec["author_id"]           = _to_int_or_none(r.get("author_id"))
-        rec["in_reply_to_user_id"] = _to_int_or_none(r.get("in_reply_to_user_id"))
-
-        # other fields
-        rec["username"]           = r.get("username")
-        rec["created_at"]         = _to_dt(r.get("created_at"))
-        rec["text"]               = r.get("text")
-        rec["lang"]               = r.get("lang")
-        rec["possibly_sensitive"] = r.get("possibly_sensitive")
-
-        # BIGINT counters
-        rec["like_count"]        = _to_int_or_none(r.get("like_count"))
-        rec["reply_count"]       = _to_int_or_none(r.get("reply_count"))
-        rec["retweet_count"]     = _to_int_or_none(r.get("retweet_count"))
-        rec["quote_count"]       = _to_int_or_none(r.get("quote_count"))
-        rec["bookmark_count"]    = _to_int_or_none(r.get("bookmark_count"))
-        rec["impression_count"]  = _to_int_or_none(r.get("impression_count"))
-
-        rec["source"]             = r.get("source")
-        rec["entities"]           = _to_json_obj(r.get("entities"))
-        rec["referenced_tweets"]  = _to_json_obj(r.get("referenced_tweets"))
-        rec["retrieved_at"]       = _to_dt(r.get("retrieved_at"))
-
-        records.append(rec)
-
-    # statement with explicit types (matches your table)
-    stmt = text("""
-        INSERT INTO tweets (
-            tweet_id, author_id, username, created_at, text, lang,
-            conversation_id, in_reply_to_user_id, possibly_sensitive,
-            like_count, reply_count, retweet_count, quote_count,
-            bookmark_count, impression_count,
-            source, entities, referenced_tweets, retrieved_at
-        ) VALUES (
-            :tweet_id, :author_id, :username, :created_at, :text, :lang,
-            :conversation_id, :in_reply_to_user_id, :possibly_sensitive,
-            :like_count, :reply_count, :retweet_count, :quote_count,
-            :bookmark_count, :impression_count,
-            :source, :entities, :referenced_tweets, :retrieved_at
-        )
-        ON CONFLICT (tweet_id) DO UPDATE SET
-            author_id            = EXCLUDED.author_id,
-            username             = EXCLUDED.username,
-            created_at           = EXCLUDED.created_at,
-            text                 = EXCLUDED.text,
-            lang                 = EXCLUDED.lang,
-            conversation_id      = EXCLUDED.conversation_id,
-            in_reply_to_user_id  = EXCLUDED.in_reply_to_user_id,
-            possibly_sensitive   = EXCLUDED.possibly_sensitive,
-            like_count           = EXCLUDED.like_count,
-            reply_count          = EXCLUDED.reply_count,
-            retweet_count        = EXCLUDED.retweet_count,
-            quote_count          = EXCLUDED.quote_count,
-            bookmark_count       = EXCLUDED.bookmark_count,
-            impression_count     = EXCLUDED.impression_count,
-            source               = EXCLUDED.source,
-            entities             = EXCLUDED.entities,
-            referenced_tweets    = EXCLUDED.referenced_tweets,
-            retrieved_at         = EXCLUDED.retrieved_at
-    """).bindparams(
-        bindparam("tweet_id",            type_=Text()),
-        bindparam("author_id",           type_=BigInteger()),
-        bindparam("username",            type_=Text()),
-        bindparam("created_at"),
-        bindparam("text",                type_=Text()),
-        bindparam("lang",                type_=Text()),
-        bindparam("conversation_id",     type_=Text()),
-        bindparam("in_reply_to_user_id", type_=BigInteger()),
-        bindparam("possibly_sensitive"),
-        bindparam("like_count",          type_=BigInteger()),
-        bindparam("reply_count",         type_=BigInteger()),
-        bindparam("retweet_count",       type_=BigInteger()),
-        bindparam("quote_count",         type_=BigInteger()),
-        bindparam("bookmark_count",      type_=BigInteger()),
-        bindparam("impression_count",    type_=BigInteger()),
-        bindparam("source",              type_=Text()),
-        bindparam("entities",            type_=JSON()),
-        bindparam("referenced_tweets",   type_=JSON()),
-        bindparam("retrieved_at"),
-    )
-
-    with engine.begin() as conn:
-        conn.execute(stmt, records)
-
-    return len(records)
-
-
-
-
-
-
-
-# ---------- Rate limit helper ----------
-def sleep_from_headers(response) -> None:
-    """
-    Sleep until the window resets using response headers if available.
-    Falls back to DEFAULT_RATE_LIMIT_SLEEP.
-    """
-    try:
-        hdrs = response.headers if response is not None else {}
-        limit = hdrs.get("x-rate-limit-limit")
-        remaining = hdrs.get("x-rate-limit-remaining")
-        reset = hdrs.get("x-rate-limit-reset")
-
-        now = int(time.time())
-        reset_ts = int(reset) if reset and reset.isdigit() else None
-        sleep_for = (reset_ts - now + 2) if reset_ts and reset_ts > now else DEFAULT_RATE_LIMIT_SLEEP
-
-        logger.warning(
-            "Rate limit reached (limit=%s, remaining=%s, reset=%s). Sleeping for %d seconds.",
-            limit, remaining, reset, sleep_for
-        )
-        time.sleep(max(1, sleep_for))
-    except Exception:
-        logger.exception("Failed to parse rate-limit headers; sleeping default %ds.", DEFAULT_RATE_LIMIT_SLEEP)
-        time.sleep(DEFAULT_RATE_LIMIT_SLEEP)
-
-
-# ---------- Fetch helpers ----------
-def _refs_to_dict_list(refs):
-    """
-    Convert Tweepy ReferencedTweet objects (or dicts) into a JSON-serializable list of dicts:
-    [{'id': 123, 'type': 'replied_to'}, ...]
-    """
-    if not refs:
-        return None
-    out = []
-    for r in refs:
-        # r might be a Tweepy object (attrs) or already a dict
-        rid = getattr(r, "id", None)
-        rtype = getattr(r, "type", None)
-        if rid is None and isinstance(r, dict):
-            rid = r.get("id")
-            rtype = r.get("type")
-        out.append({"id": int(rid) if rid is not None else None, "type": rtype})
-    return out
-
-def normalize_tweet(t, author_id: int, username: Optional[str]) -> Dict:
-    pm = getattr(t, "public_metrics", {}) or {}
-
-    # Entities returned by v2 are already plain dicts (JSON-serializable).
-    entities = getattr(t, "entities", None)
-
-    # Referenced tweets need conversion to plain dicts.
-    refs = getattr(t, "referenced_tweets", None)
-    refs_dicts = _refs_to_dict_list(refs) if refs else None
-
-    return {
-        "tweet_id": str(t.id),
-        "author_id": int(author_id),
-        "username": username,
-        "created_at": t.created_at,
-        "text": getattr(t, "text", None),
-        "lang": getattr(t, "lang", None),
-        "conversation_id": str(getattr(t, "conversation_id", "")) if getattr(t, "conversation_id", None) else None,
-        "in_reply_to_user_id": getattr(t, "in_reply_to_user_id", None),
-        "possibly_sensitive": getattr(t, "possibly_sensitive", None),
-
-        # public metrics
-        "like_count": pm.get("like_count"),
-        "reply_count": pm.get("reply_count"),
-        "retweet_count": pm.get("retweet_count"),
-        "quote_count": pm.get("quote_count"),
-
-        # often absent on Basic for others' tweets (will be None)
-        "bookmark_count": pm.get("bookmark_count"),
-        "impression_count": pm.get("impression_count"),
-
-        "source": getattr(t, "source", None),
-
-        # your INSERT uses text() into JSONB columns, so dump to JSON strings here
-        "entities": json.dumps(entities) if entities is not None else None,
-        "referenced_tweets": json.dumps(refs_dicts) if refs_dicts is not None else None,
-
-        "retrieved_at": datetime.now(timezone.utc),
-    }
-
-def fetch_last_100(author_id: int, start_time=None):
-    kwargs = {}
-    if start_time is not None:
-        kwargs["start_time"] = start_time
-    return client.get_users_tweets(
-        id=author_id,
-        max_results=100,
-        tweet_fields=TWEET_FIELDS,
-        **kwargs
-    )
-
-def fetch_since_pages(author_id: int, since_id: int):
-    return tweepy.Paginator(
-        client.get_users_tweets,
-        id=author_id,
-        since_id=since_id,
-        max_results=100,
-        tweet_fields=TWEET_FIELDS
-    )
-
 def author_already_fetched_on(author_id: int) -> bool:
-    """
-    Return True if tweets for this author were already written on the given UTC day.
-    """
     day_start = Params.skip_fetch_date
+    if not day_start:
+        return False
     day_end = day_start + timedelta(days=1)
     sql = text("""
-        SELECT 1
-        FROM tweets
+        SELECT 1 FROM tweets
         WHERE author_id = :aid
           AND retrieved_at >= :start_ts
           AND retrieved_at <  :end_ts
@@ -419,51 +69,110 @@ def author_already_fetched_on(author_id: int) -> bool:
         row = conn.execute(sql, {"aid": author_id, "start_ts": day_start, "end_ts": day_end}).fetchone()
         return row is not None
 
+# ---------- rate-limit ----------
+def sleep_from_headers(response) -> None:
+    try:
+        hdrs = response.headers if response is not None else {}
+        reset = hdrs.get("x-rate-limit-reset")
+        now = int(time.time())
+        reset_ts = int(reset) if reset and reset.isdigit() else None
+        sleep_for = (reset_ts - now + 2) if reset_ts and reset_ts > now else DEFAULT_RATE_LIMIT_SLEEP
+        logger.warning("Rate limit hit; sleeping %ds", sleep_for)
+        time.sleep(max(1, sleep_for))
+    except Exception:
+        logger.exception("Rate-limit header parse failed; sleeping default")
+        time.sleep(DEFAULT_RATE_LIMIT_SLEEP)
 
+# ---------- tweepy wrappers ----------
+def _refs_to_dict_list(refs):
+    if not refs:
+        return None
+    out = []
+    for r in refs:
+        rid = getattr(r, "id", None) if not isinstance(r, dict) else r.get("id")
+        rtype = getattr(r, "type", None) if not isinstance(r, dict) else r.get("type")
+        out.append({"id": int(rid) if rid is not None else None, "type": rtype})
+    return out
 
-# ---------- Main ----------
+def normalize_tweet(t, author_id: int, username: Optional[str]) -> Dict:
+    pm = getattr(t, "public_metrics", {}) or {}
+    entities = getattr(t, "entities", None)
+    refs = _refs_to_dict_list(getattr(t, "referenced_tweets", None))
+    return {
+        "tweet_id": str(t.id),
+        "author_id": int(author_id),
+        "username": username,
+        "created_at": t.created_at,  # aware dt
+        "text": getattr(t, "text", None),
+        "lang": getattr(t, "lang", None),
+        "conversation_id": str(getattr(t, "conversation_id")) if getattr(t, "conversation_id", None) else None,
+        "in_reply_to_user_id": getattr(t, "in_reply_to_user_id", None),
+        "possibly_sensitive": getattr(t, "possibly_sensitive", None),
+        "like_count": pm.get("like_count"),
+        "reply_count": pm.get("reply_count"),
+        "retweet_count": pm.get("retweet_count"),
+        "quote_count": pm.get("quote_count"),
+        "bookmark_count": pm.get("bookmark_count"),
+        "impression_count": pm.get("impression_count"),
+        "source": getattr(t, "source", None),
+        "entities": entities,                # dict (JSONB)
+        "referenced_tweets": refs,           # list[dict] (JSONB)
+        "retrieved_at": datetime.now(timezone.utc),
+    }
+
+def fetch_last_100(author_id: int, start_time=None):
+    kwargs = {"start_time": start_time} if start_time else {}
+    return client.get_users_tweets(id=author_id, max_results=100, tweet_fields=TWEET_FIELDS, **kwargs)
+
+def fetch_since_pages(author_id: int, since_id: str):
+    return tweepy.Paginator(
+        client.get_users_tweets,
+        id=author_id, since_id=since_id, max_results=100, tweet_fields=TWEET_FIELDS
+    )
+
+# ---------- insert ----------
+def upsert_tweets(rows: List[Dict]) -> int:
+    if not rows:
+        return 0
+    records = sanitize_rows(rows)
+    with engine.begin() as conn:
+        conn.execute(INSERT_TWEETS_STMT, records)
+    return len(records)
+
+# ---------- main ----------
 def main():
     profiles = get_all_profiles()
     total_available = len(profiles)
-    start_time = _get_start_time_from_params()
-    # sampling
+
+    # optional sampling
     n = int(Params.tweets_sample_limit)
     if n >= 0:
         if Params.sample_seed is not None:
             random.seed(int(Params.sample_seed))
-        n = min(n, total_available)
-        profiles = random.sample(profiles, n)
+        profiles = random.sample(profiles, min(n, total_available))
 
-    profiles = [p for p in profiles if p["author_id"] == 809895794]
+    # start time cutoff from params
+    start_time = _start_time()
 
-    total_profiles = len(profiles)
     logger.info(
-        "Starting tweets fetch: selected %d profiles (out of %d available). sample_limit=%s seed=%s",
-        total_profiles, total_available, Params.tweets_sample_limit, Params.sample_seed
+        "Starting tweets fetch: selected %d profiles (out of %d). sample_limit=%s seed=%s",
+        len(profiles), total_available, Params.tweets_sample_limit, Params.sample_seed
     )
 
-
     total_upserts = 0
-    processed = 0
-
-    for p in profiles:
-        processed += 1
-        remaining = total_profiles - processed
-        aid = p["author_id"]
-        uname = p["username"]
-
-        if author_already_fetched_on(aid):
-            logger.info("Skipping %s (%s): already fetched on 2025-08-28.", uname, aid)
+    for i, p in enumerate(profiles, start=1):
+        aid = p["author_id"]; uname = p["username"]
+        if Params.skip_fetch_date and author_already_fetched_on(aid):
+            logger.info("Skipping %s (%s): already fetched on %s.", uname, aid, Params.skip_fetch_date.date())
             continue
 
-        logger.info("Profile %d/%d (remaining %d): %s (%s)",
-                    processed, total_profiles, remaining, uname, aid)
+        logger.info("Profile %d/%d: %s (%s)", i, len(profiles), uname, aid)
 
         try:
             last_id = get_latest_tweet_id(aid)
 
             if last_id is None:
-                # Initial: just one call for last 100
+                # initial
                 while True:
                     try:
                         resp = fetch_last_100(aid, start_time=start_time)
@@ -472,50 +181,25 @@ def main():
                         sleep_from_headers(getattr(e, "response", None))
                 tweets = resp.data or []
                 rows = [normalize_tweet(t, aid, uname) for t in tweets]
-                n = upsert_tweets(rows)
-                total_upserts += n
-                logger.info(
-                    "Initial fetch%s: upserted %d tweets for %s",
-                    f" since {start_time.isoformat()}" if start_time else "",
-                    n, uname
-                )
-
+                total_upserts += upsert_tweets(rows)
             else:
-                # Incremental: paginate since last_id
+                # incremental
                 new_rows: List[Dict] = []
-                paginator = fetch_since_pages(aid, last_id)
-
-                page_count = 0
-                tweet_count = 0
-
-                for page in paginator:
-                    page_count += 1
+                for page in fetch_since_pages(aid, since_id=last_id):
                     n = len(page.data) if page.data else 0
-                    tweet_count += n
-                    logger.info("Author %s (%s): fetched page %d with %d tweets (total %d so far)", 
-                                uname, aid, page_count, n, tweet_count)
+                    logger.info("Author %s (%s): page with %d tweets", uname, aid, n)
                     if page.data:
-                        for t in page.data:
-                            new_rows.append(normalize_tweet(t, aid, uname))
-                    # If rate limited mid-pagination, Tweepy raises on next API call:
-                    # we loop/sleep/retry the current author until window resets.
-                # Upsert after finishing pages (or if none, n=0)
-                n = upsert_tweets(new_rows)
-                total_upserts += n
-                logger.info("Incremental fetch since_id=%s: upserted %d tweets for %s",
-                            last_id, n, uname)
+                        new_rows.extend(normalize_tweet(t, aid, uname) for t in page.data)
+                total_upserts += upsert_tweets(new_rows)
 
         except tweepy.TooManyRequests as e:
-            # If a 429 bubbles up (e.g., first call for an author), sleep and retry this author
             sleep_from_headers(getattr(e, "response", None))
-            # decrement processed so the same profile is retried with correct progress numbering
-            processed -= 1
+            # retry this author
             continue
         except Exception:
             logger.exception("Unexpected error for author_id=%s", aid)
 
     logger.info("Done. Total tweets upserted/updated: %d", total_upserts)
-
 
 if __name__ == "__main__":
     main()
