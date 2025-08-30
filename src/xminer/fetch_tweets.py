@@ -253,13 +253,13 @@ def normalize_tweet(t, author_id: int, username: Optional[str]) -> Dict:
     refs_dicts = _refs_to_dict_list(refs) if refs else None
 
     return {
-        "tweet_id": int(t.id),
+        "tweet_id": str(t.id),
         "author_id": int(author_id),
         "username": username,
         "created_at": t.created_at,
         "text": getattr(t, "text", None),
         "lang": getattr(t, "lang", None),
-        "conversation_id": getattr(t, "conversation_id", None),
+        "conversation_id": str(getattr(t, "conversation_id", "")) if getattr(t, "conversation_id", None) else None,
         "in_reply_to_user_id": getattr(t, "in_reply_to_user_id", None),
         "possibly_sensitive": getattr(t, "possibly_sensitive", None),
 
