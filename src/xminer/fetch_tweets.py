@@ -116,19 +116,30 @@ def get_latest_tweet_id(author_id: int) -> Optional[int]:
     """)
     with engine.begin() as conn:
         row = conn.execute(sql, {"aid": author_id}).fetchone()
-        return int(row[0]) if row else None
+        return str(row[0]) if row else None
 
 def _coerce_int_columns(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
 
-    # only numeric counters; IDs are text or nullable ints depending on schema
-    for col in (set(Params.count_cols) & set(df.columns)):
+    # 1) Coerce numeric counters (stay BIGINT in DB)
+    count_cols = set(Params.count_cols) & set(df.columns)
+    for col in count_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
 
-    # convert pandas NA to None so DB sees NULL
+    # 2) Coerce the remaining BIGINT ID columns (not text ones!)
+    #    You said only tweet_id and conversation_id are TEXT now.
+    for col in ["author_id", "in_reply_to_user_id"]:
+        if col in df.columns:
+            # make numeric (nullable), then Python int/None
+            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+            df[col] = df[col].apply(lambda x: int(x) if pd.notna(x) else None)
+
+    # 3) Global NA -> None (for non-numeric fields too)
     df = df.where(df.notnull(), None)
+
     return df
+
 
 
 def upsert_tweets(rows: list[dict]) -> int:
