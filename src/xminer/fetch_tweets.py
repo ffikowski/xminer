@@ -198,7 +198,7 @@ def main():
                     logger.info("Author %s (%s): page with %d tweets", uname, aid, n)
                     if page.data:
                         new_rows.extend(normalize_tweet(t, aid, uname) for t in page.data)
-                inserted = upsert_tweets(rows)
+                inserted = upsert_tweets(new_rows)
                 logger.info("Fetched %d tweets for %s (%s)", inserted, uname, aid)
                 total_upserts += inserted
 
