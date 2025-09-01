@@ -16,4 +16,4 @@ count_cols:
   - quote_count
   - bookmark_count
   - impression_count
-skip_fetch_date: "2025-08-28"
+skip_fetch_date: "2025-09-28"

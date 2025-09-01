@@ -104,20 +104,9 @@ def upsert_x_profiles(df: pd.DataFrame) -> int:
             :followers_count, :following_count, :tweet_count, :listed_count,
             :location, :description, :retrieved_at
         )
-        ON CONFLICT (x_user_id) DO UPDATE SET
-            username        = EXCLUDED.username,
-            name            = EXCLUDED.name,
-            created_at      = EXCLUDED.created_at,
-            verified        = EXCLUDED.verified,
-            protected       = EXCLUDED.protected,
-            followers_count = EXCLUDED.followers_count,
-            following_count = EXCLUDED.following_count,
-            tweet_count     = EXCLUDED.tweet_count,
-            listed_count    = EXCLUDED.listed_count,
-            location        = EXCLUDED.location,
-            description     = EXCLUDED.description,
-            retrieved_at    = EXCLUDED.retrieved_at;
+        ON CONFLICT (x_user_id, retrieved_at) DO NOTHING;
     """)
+
 
     with engine.begin() as conn:
         conn.execute(sql, rows)

@@ -9,7 +9,7 @@ from sqlalchemy import text
 from .config.config import Config
 from .config.params import Params
 from .db import engine
-from .ingest_helpers import sanitize_rows, INSERT_TWEETS_STMT
+from .utils.tweets_helpers import sanitize_rows, INSERT_TWEETS_STMT
 
 # ---------- logging ----------
 os.makedirs("logs", exist_ok=True)
@@ -181,7 +181,9 @@ def main():
                         sleep_from_headers(getattr(e, "response", None))
                 tweets = resp.data or []
                 rows = [normalize_tweet(t, aid, uname) for t in tweets]
-                total_upserts += upsert_tweets(rows)
+                inserted = upsert_tweets(rows)
+                logger.info("Fetched %d tweets for %s (%s)", inserted, uname, aid)
+                total_upserts += inserted
             else:
                 # incremental
                 new_rows: List[Dict] = []
@@ -190,7 +192,9 @@ def main():
                     logger.info("Author %s (%s): page with %d tweets", uname, aid, n)
                     if page.data:
                         new_rows.extend(normalize_tweet(t, aid, uname) for t in page.data)
-                total_upserts += upsert_tweets(new_rows)
+                inserted = upsert_tweets(rows)
+                logger.info("Fetched %d tweets for %s (%s)", inserted, uname, aid)
+                total_upserts += inserted
 
         except tweepy.TooManyRequests as e:
             sleep_from_headers(getattr(e, "response", None))
