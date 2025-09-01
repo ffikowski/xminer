@@ -38,7 +38,13 @@ def _start_time():
 
 # ---------- db ----------
 def get_all_profiles() -> List[Dict]:
-    sql = text("SELECT x_user_id, username FROM x_profiles WHERE x_user_id IS NOT NULL ORDER BY x_user_id")
+    sql = text("""
+        SELECT DISTINCT ON (x_user_id) 
+               x_user_id, username
+        FROM x_profiles
+        WHERE x_user_id IS NOT NULL
+        ORDER BY x_user_id, retrieved_at DESC
+    """)
     with engine.begin() as conn:
         return [{"author_id": int(r[0]), "username": r[1]} for r in conn.execute(sql).fetchall()]
 
