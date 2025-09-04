@@ -39,3 +39,9 @@ class Params:
         "quote_count","bookmark_count","impression_count"
     ])
     skip_fetch_date = datetime.fromisoformat(_loaded.get("skip_fetch_date")).replace(tzinfo=timezone.utc)
+
+    # New metrics parameters (top-level keys in parameters.yml)
+    year   = int(_loaded.get("year", 2025))
+    month  = int(_loaded.get("month", 9))
+    outdir = _loaded.get("outdir", "output")
+    top_n  = int(_loaded.get("top_n", 10))

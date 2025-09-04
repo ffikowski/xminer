@@ -17,3 +17,7 @@ count_cols:
   - bookmark_count
   - impression_count
 skip_fetch_date: "2025-09-28"
+year: 2025
+month: 9
+outdir: output
+top_n: 10
