@@ -46,9 +46,9 @@ WITH joined AS (
     xp.location,
     xp.description,
     xp.retrieved_at,
-    p.party,
-    p.gender,
-    p.birth_date,
+    p.PARTEI_KURZ,
+    p.GESCHLECHT,
+    p.GEBURTSDATUM,
     ROW_NUMBER() OVER (PARTITION BY lower(xp.username) ORDER BY xp.retrieved_at DESC) AS rn
   FROM {schema}.{x_profiles} xp
   JOIN {schema}.{politicians} p
