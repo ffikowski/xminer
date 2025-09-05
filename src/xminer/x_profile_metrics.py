@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import List
@@ -12,6 +13,19 @@ from sqlalchemy import text
 # --- Project-style imports (match fetch_tweets) ---
 from .db import engine  # central engine built from Config.DATABASE_URL
 from .config.params import Params  # parameters class already used in production
+
+# ---------- logging ----------
+os.makedirs("logs", exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("logs/x_profile_metrics.log", mode="w"),
+        logging.StreamHandler(),
+    ],
+)
+logger = logging.getLogger(__name__)
+
 
 # -------------------------------
 # Data access
@@ -107,8 +121,9 @@ def metric_individual_base(df: pd.DataFrame) -> pd.DataFrame:
     ]
     existing_cols = [c for c in cols if c in out.columns]
     sort_cols = [c for c in ["party", "followers_count"] if c in out.columns]
-    return out[existing_cols].sort_values(sort_cols, ascending=[True, False] if len(sort_cols)==2 else False)
-
+    result = out[existing_cols].sort_values(sort_cols, ascending=[True, False] if len(sort_cols)==2 else False)
+    logger.info("Computed metric_individual_base with %d rows", len(result))
+    return result
 
 def metric_party_summary(df: pd.DataFrame) -> pd.DataFrame:
     if "party" not in df.columns:
@@ -128,8 +143,9 @@ def metric_party_summary(df: pd.DataFrame) -> pd.DataFrame:
         "verified_share": g[safe_series("verified")].mean(),
         "protected_share": g[safe_series("protected")].mean(),
     }).reset_index()
-    summary["followers_per_member"] = _safe_div(summary["followers_sum"], summary["members"])
-    return summary.sort_values("followers_sum", ascending=False)
+    result = summary.sort_values("followers_sum", ascending=False)
+    logger.info("Computed metric_party_summary with %d rows", len(result))
+    return result
 
 
 def metric_top_accounts_by_party(df: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
@@ -139,10 +155,28 @@ def metric_top_accounts_by_party(df: pd.DataFrame, top_n: int = 10) -> pd.DataFr
     df = df.copy()
     df["rank_in_party"] = df.groupby("party")["followers_count"].rank(ascending=False, method="first")
     cols = [c for c in ["party", "rank_in_party", "username", "name", "followers_count", "verified"] if c in df.columns]
-    return (
+    result = (
         df.loc[df["rank_in_party"] <= top_n, cols]
-        .sort_values(["party", "rank_in_party"]) 
+        .sort_values(["party", "rank_in_party"])
     )
+    logger.info("Computed metric_top_accounts_by_party with %d rows (top_n=%d)", len(result), top_n)
+    return result
+
+def metric_top_accounts_global(df: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
+    """Top accounts overall by followers (across all parties)."""
+    if "followers_count" not in df.columns:
+        logger.warning("metric_top_accounts_global skipped: 'followers_count' column missing")
+        return pd.DataFrame()
+    df = df.copy()
+    df["rank_global"] = df["followers_count"].rank(ascending=False, method="first")
+    cols = [c for c in ["rank_global", "username", "name", "party", "followers_count", "verified"] if c in df.columns]
+    result = (
+        df.sort_values("followers_count", ascending=False)
+          .head(top_n)[cols]
+          .reset_index(drop=True)
+    )
+    logger.info("Computed metric_top_accounts_global with %d rows (top_n=%d)", len(result), top_n)
+    return result
 
 
 # -------------------------------
@@ -166,6 +200,11 @@ def build_metrics(top_n: int) -> List[MetricSpec]:
             description=f"Top {top_n} accounts within each party by followers",
             compute=lambda df: metric_top_accounts_by_party(df, top_n=top_n),
         ),
+        MetricSpec(
+            name="top_accounts_global",
+            description=f"Top {top_n} accounts overall by followers",
+            compute=lambda df: metric_top_accounts_global(df, top_n=top_n),
+        )
     ]
 
 
@@ -181,13 +220,13 @@ def run(year: int, month: int, outdir: str, schema: str, x_profiles: str, politi
     }
     missing = required_cols - set(latest.columns)
     if missing:
-        print(f"⚠️  Missing columns in joined dataset: {sorted(missing)}. Some metrics may be partial.")
+        logger.warning("Missing columns in joined dataset: %s. Some metrics may be partial.", sorted(missing))
 
     for spec in build_metrics(top_n=top_n):
         df_metric = spec.compute(latest)
         out_path = os.path.join(outdir, f"{spec.name}_{ym}.csv")
         df_metric.to_csv(out_path, index=False)
-        print(f"✅ Wrote {spec.description} -> {out_path}")
+        logger.info("Wrote %s -> %s", spec.description, out_path)
 
 # -------------------------------
 # Entrypoint (parameters.yml only)
