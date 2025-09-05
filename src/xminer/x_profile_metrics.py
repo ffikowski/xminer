@@ -126,24 +126,44 @@ def metric_individual_base(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 def metric_party_summary(df: pd.DataFrame) -> pd.DataFrame:
-    if "partei_kurz" not in df.columns:
+    if "party" not in df.columns:
+        logger.warning("metric_party_summary skipped: 'party' column missing")
         return pd.DataFrame()
-    g = df.groupby("partei_kurz", dropna=False)
-    def safe_series(name):
-        return df[name] if name in df.columns else pd.Series(dtype=float)
 
-    summary = pd.DataFrame({
-        "members": g.size(),
-        "followers_sum": g[safe_series("followers_count")].sum(),
-        "followers_mean": g[safe_series("followers_count")].mean(),
-        "followers_median": g[safe_series("followers_count")].median(),
-        "following_mean": g[safe_series("following_count")].mean(),
-        "tweet_mean": g[safe_series("tweet_count")].mean(),
-        "listed_mean": g[safe_series("listed_count")].mean(),
-        "verified_share": g[safe_series("verified")].mean(),
-        "protected_share": g[safe_series("protected")].mean(),
-    }).reset_index()
-    result = summary.sort_values("followers_sum", ascending=False)
+    g = df.groupby("party", dropna=False)
+
+    # start with a simple members count
+    summary = g.size().rename("members").to_frame()
+
+    # add aggregations only if those columns exist
+    if "followers_count" in df.columns:
+        summary["followers_sum"] = g["followers_count"].sum()
+        summary["followers_mean"] = g["followers_count"].mean()
+        summary["followers_median"] = g["followers_count"].median()
+
+    if "following_count" in df.columns:
+        summary["following_mean"] = g["following_count"].mean()
+
+    if "tweet_count" in df.columns:
+        summary["tweet_mean"] = g["tweet_count"].mean()
+
+    if "listed_count" in df.columns:
+        summary["listed_mean"] = g["listed_count"].mean()
+
+    # boolean shares (mean over 0/1)
+    if "verified" in df.columns:
+        summary["verified_share"] = g["verified"].mean()
+    if "protected" in df.columns:
+        summary["protected_share"] = g["protected"].mean()
+
+    # derived metric if inputs present
+    if {"followers_sum", "members"}.issubset(summary.columns):
+        summary["followers_per_member"] = summary["followers_sum"] / summary["members"]
+
+    # order by what's available
+    sort_col = "followers_sum" if "followers_sum" in summary.columns else "members"
+    result = summary.reset_index().sort_values(sort_col, ascending=False)
+
     logger.info("Computed metric_party_summary with %d rows", len(result))
     return result
 
