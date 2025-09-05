@@ -126,11 +126,11 @@ def metric_individual_base(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 def metric_party_summary(df: pd.DataFrame) -> pd.DataFrame:
-    if "party" not in df.columns:
+    if "partei_kurz" not in df.columns:
         logger.warning("metric_party_summary skipped: 'party' column missing")
         return pd.DataFrame()
 
-    g = df.groupby("party", dropna=False)
+    g = df.groupby("partei_kurz", dropna=False)
 
     # start with a simple members count
     summary = g.size().rename("members").to_frame()
