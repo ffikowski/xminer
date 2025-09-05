@@ -70,8 +70,8 @@ def load_latest_profiles(schema: str, x_profiles: str, politicians: str) -> pd.D
         df["created_at"] = pd.to_datetime(df["created_at"], utc=True, errors="coerce")
     if "retrieved_at" in df:
         df["retrieved_at"] = pd.to_datetime(df["retrieved_at"], utc=True, errors="coerce")
-    if "birth_date" in df:
-        df["birth_date"] = pd.to_datetime(df["birth_date"], utc=True, errors="coerce").dt.date
+    if "GEBURTSDATUM" in df:
+        df["GEBURTSDATUM"] = pd.to_datetime(df["GEBURTSDATUM"], utc=True, errors="coerce").dt.date
     # Normalize username case
     if "username" in df:
         df["username"] = df["username"].astype(str).str.strip()
@@ -114,21 +114,21 @@ def metric_individual_base(df: pd.DataFrame) -> pd.DataFrame:
     out["followers_per_day"] = _safe_div(out.get("followers_count"), denom_age)
 
     cols = [
-        "username", "name", "party", "verified", "protected",
+        "username", "name", "PARTEI_KURZ", "verified", "protected",
         "followers_count", "following_count", "tweet_count", "listed_count",
         "account_age_days", "followers_per_day", "follow_ratio", "followers_per_tweet",
         "created_at", "retrieved_at"
     ]
     existing_cols = [c for c in cols if c in out.columns]
-    sort_cols = [c for c in ["party", "followers_count"] if c in out.columns]
+    sort_cols = [c for c in ["PARTEI_KURZ", "followers_count"] if c in out.columns]
     result = out[existing_cols].sort_values(sort_cols, ascending=[True, False] if len(sort_cols)==2 else False)
     logger.info("Computed metric_individual_base with %d rows", len(result))
     return result
 
 def metric_party_summary(df: pd.DataFrame) -> pd.DataFrame:
-    if "party" not in df.columns:
+    if "PARTEI_KURZ" not in df.columns:
         return pd.DataFrame()
-    g = df.groupby("party", dropna=False)
+    g = df.groupby("PARTEI_KURZ", dropna=False)
     def safe_series(name):
         return df[name] if name in df.columns else pd.Series(dtype=float)
 
@@ -149,15 +149,15 @@ def metric_party_summary(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def metric_top_accounts_by_party(df: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
-    needed = {"party", "followers_count"}
+    needed = {"PARTEI_KURZ", "followers_count"}
     if not needed.issubset(df.columns):
         return pd.DataFrame()
     df = df.copy()
-    df["rank_in_party"] = df.groupby("party")["followers_count"].rank(ascending=False, method="first")
-    cols = [c for c in ["party", "rank_in_party", "username", "name", "followers_count", "verified"] if c in df.columns]
+    df["rank_in_party"] = df.groupby("PARTEI_KURZ")["followers_count"].rank(ascending=False, method="first")
+    cols = [c for c in ["PARTEI_KURZ", "rank_in_party", "username", "name", "followers_count", "verified"] if c in df.columns]
     result = (
         df.loc[df["rank_in_party"] <= top_n, cols]
-        .sort_values(["party", "rank_in_party"])
+        .sort_values(["PARTEI_KURZ", "rank_in_party"])
     )
     logger.info("Computed metric_top_accounts_by_party with %d rows (top_n=%d)", len(result), top_n)
     return result
@@ -169,7 +169,7 @@ def metric_top_accounts_global(df: pd.DataFrame, top_n: int = 10) -> pd.DataFram
         return pd.DataFrame()
     df = df.copy()
     df["rank_global"] = df["followers_count"].rank(ascending=False, method="first")
-    cols = [c for c in ["rank_global", "username", "name", "party", "followers_count", "verified"] if c in df.columns]
+    cols = [c for c in ["rank_global", "username", "name", "PARTEI_KURZ", "followers_count", "verified"] if c in df.columns]
     result = (
         df.sort_values("followers_count", ascending=False)
           .head(top_n)[cols]
@@ -215,7 +215,7 @@ def run(year: int, month: int, outdir: str, schema: str, x_profiles: str, politi
     latest = load_latest_profiles(schema=schema, x_profiles=x_profiles, politicians=politicians)
 
     required_cols = {
-        "username", "party", "created_at", "verified", "protected",
+        "username", "PARTEI_KURZ", "created_at", "verified", "protected",
         "followers_count", "following_count", "tweet_count", "listed_count", "retrieved_at"
     }
     missing = required_cols - set(latest.columns)
