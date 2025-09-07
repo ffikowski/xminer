@@ -6,10 +6,10 @@ from typing import Dict, List, Optional
 import tweepy
 from sqlalchemy import text
 
-from .config.config import Config
-from .config.params import Params
-from .db import engine
-from .utils.tweets_helpers import sanitize_rows, INSERT_TWEETS_STMT
+from ..config.params import Params
+from ..io.db import engine
+from ..io.x_api import client
+from ..utils.tweets_helpers import sanitize_rows, INSERT_TWEETS_STMT
 
 # ---------- logging ----------
 os.makedirs("logs", exist_ok=True)
@@ -21,8 +21,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ---------- client ----------
-client = tweepy.Client(bearer_token=Config.X_BEARER_TOKEN, wait_on_rate_limit=False)
 TWEET_FIELDS = [
     "created_at","lang","public_metrics","conversation_id","in_reply_to_user_id",
     "possibly_sensitive","source","entities","referenced_tweets",
@@ -82,12 +80,12 @@ def sleep_from_headers(response) -> None:
         reset = hdrs.get("x-rate-limit-reset")
         now = int(time.time())
         reset_ts = int(reset) if reset and reset.isdigit() else None
-        sleep_for = (reset_ts - now + 2) if reset_ts and reset_ts > now else DEFAULT_RATE_LIMIT_SLEEP
+        sleep_for = (reset_ts - now + 2) if reset_ts and reset_ts > now else Params.rate_limit_fallback_sleep
         logger.warning("Rate limit hit; sleeping %ds", sleep_for)
         time.sleep(max(1, sleep_for))
     except Exception:
         logger.exception("Rate-limit header parse failed; sleeping default")
-        time.sleep(DEFAULT_RATE_LIMIT_SLEEP)
+        time.sleep(Params.rate_limit_fallback_sleep)
 
 # ---------- tweepy wrappers ----------
 def _refs_to_dict_list(refs):
@@ -128,12 +126,12 @@ def normalize_tweet(t, author_id: int, username: Optional[str]) -> Dict:
 
 def fetch_last_100(author_id: int, start_time=None):
     kwargs = {"start_time": start_time} if start_time else {}
-    return client.get_users_tweets(id=author_id, max_results=100, tweet_fields=TWEET_FIELDS, **kwargs)
+    return client.get_users_tweets(id=author_id, max_results=100, tweet_fields=Params.tweet_fields, **kwargs)
 
 def fetch_since_pages(author_id: int, since_id: str):
     return tweepy.Paginator(
         client.get_users_tweets,
-        id=author_id, since_id=since_id, max_results=100, tweet_fields=TWEET_FIELDS
+        id=author_id, since_id=since_id, max_results=100, tweet_fields=Params.tweet_fields
     )
 
 # ---------- insert ----------

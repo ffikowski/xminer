@@ -11,8 +11,8 @@ import pandas as pd
 from sqlalchemy import text
 
 # --- Project-style imports (match fetch_tweets) ---
-from .db import engine  # central engine built from Config.DATABASE_URL
-from .config.params import Params  # parameters class already used in production
+from ..io.db import engine  # central engine built from Config.DATABASE_URL
+from ..config.params import Params  # parameters class already used in production
 
 # ---------- logging ----------
 os.makedirs("logs", exist_ok=True)

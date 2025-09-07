@@ -23,7 +23,7 @@ load_dotenv()
 
 # Try to reuse xminer.db.engine if available
 try:
-    from .db import engine as default_engine
+    from ..io.db import engine as default_engine
 except Exception:
     default_engine = None
 

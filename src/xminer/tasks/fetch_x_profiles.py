@@ -6,10 +6,9 @@ import pandas as pd
 import tweepy
 from sqlalchemy import text
 
-from .config.config import Config          # secrets: bearer, env
-from .config.params import Params          # non-secrets: log file, sample_limit, etc.
-from .db import engine                     # shared engine
-
+from ..config.params import Params          # non-secrets: log file, sample_limit, etc.
+from ..io.db import engine                     # shared engine
+from ..io.x_api import client 
 # ---------- Logging (from parameters.yml) ----------
 os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
@@ -22,8 +21,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ---------- Tweepy client ----------
-client = tweepy.Client(bearer_token=Config.X_BEARER_TOKEN, wait_on_rate_limit=True)
+# ---------- Main logic ----------
 
 def read_usernames(limit: int | None):
     if limit is None or limit < 0:

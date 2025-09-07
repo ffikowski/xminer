@@ -21,3 +21,14 @@ year: 2025
 month: 9
 outdir: output
 top_n: 10
+tweet_fields:
+  - created_at
+  - lang
+  - public_metrics
+  - conversation_id
+  - in_reply_to_user_id
+  - possibly_sensitive
+  - source
+  - entities
+  - referenced_tweets
+rate_limit_fallback_sleep: 901

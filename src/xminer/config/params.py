@@ -38,6 +38,13 @@ class Params:
         "like_count","reply_count","retweet_count",
         "quote_count","bookmark_count","impression_count"
     ])
+
+    tweet_fields = _loaded.get("tweet_fields", [
+        "created_at","lang","public_metrics","conversation_id","in_reply_to_user_id",
+        "possibly_sensitive","source","entities","referenced_tweets",
+    ])
+    rate_limit_fallback_sleep = int(_loaded.get("rate_limit_fallback_sleep", 901))
+
     skip_fetch_date = datetime.fromisoformat(_loaded.get("skip_fetch_date")).replace(tzinfo=timezone.utc)
 
     # New metrics parameters (top-level keys in parameters.yml)
