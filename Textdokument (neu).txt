@@ -1,0 +1,9 @@
+vps root password Suff1996Fl01?
+vps additional user "app" Suff1996Fl01!
+
+twitter_credentials:
+  api_key: "dzjf6wMvAAQJoraMrbebJj6i3"
+  api_key_secret: "gac2m4MDj8Y2ETpWCUCqcuGKmhxcTRBKMLEptKkrSZltTp85n3"
+  bearer_token: "AAAAAAAAAAAAAAAAAAAAAFrRpgEAAAAA8ZLh2LfZRM6VvL9Ps47Jzxo%2FWng%3DxiI8FZzyYzyKPjEZsrbNUU8k2CdfneP5d4RXLYQjXuQGPwUnF8"
+  access_token: "1151248430913806343-dYizP70k2GpwdO5gamBK7zKTSPpLuT"
+  access_token_secret: "8Teaj4JKhd4Jj9gDAO2oTDAslAsR7mu4ZmjIepUBeaOyQ"

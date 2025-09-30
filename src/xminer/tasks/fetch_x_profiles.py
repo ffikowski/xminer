@@ -1,4 +1,4 @@
-import os, logging
+import os, logging, re
 from datetime import datetime, timezone
 from typing import List, Dict
 
@@ -23,18 +23,33 @@ logger = logging.getLogger(__name__)
 
 # ---------- Main logic ----------
 
+import re
+
+def _politicians_table_name(month: int, year: int) -> str:
+    # Coerce and zero-pad month, e.g. 8 -> "08"
+    mm = f"{int(month):02d}"
+    yyyy = f"{int(year):04d}"
+    tbl = f'politicians_{mm}_{yyyy}'
+    # extra safety: only allow names like politicians_08_2025
+    if not re.fullmatch(r"politicians_\d{2}_\d{4}", tbl):
+        raise ValueError(f"Invalid table name: {tbl}")
+    return tbl
+
+
 def read_usernames(limit: int | None):
+    tbl = _politicians_table_name(Params.month, Params.year)  # e.g., "politicians_08_2025"
+
     if limit is None or limit < 0:
-        q = text("""
+        q = text(f"""
             SELECT username
-            FROM politicians
+            FROM public."{tbl}"
             WHERE username IS NOT NULL AND username <> '' AND username <> 'gelöscht'
         """)
         params = {}
     else:
-        q = text("""
+        q = text(f"""
             SELECT username
-            FROM politicians
+            FROM public."{tbl}"
             WHERE username IS NOT NULL AND username <> '' AND username <> 'gelöscht'
             LIMIT :lim
         """)
@@ -42,7 +57,6 @@ def read_usernames(limit: int | None):
 
     with engine.begin() as conn:
         return [str(r[0]).lstrip("@") for r in conn.execute(q, params).fetchall()]
-
 
 def chunk(lst, n):
     return [lst[i:i+n] for i in range(0, len(lst), n)]
