@@ -13,6 +13,7 @@ from sqlalchemy import text
 # --- Project-style imports (match fetch_tweets) ---
 from ..io.db import engine  # central engine built from Config.DATABASE_URL
 from ..config.params import Params  # parameters class already used in production
+from ..utils.tweets_helpers import politicians_table_name
 
 # ---------- logging ----------
 os.makedirs("logs", exist_ok=True)
@@ -62,6 +63,8 @@ WHERE rn = 1
 
 def load_latest_profiles(schema: str, x_profiles: str, politicians: str) -> pd.DataFrame:
     """Return one latest row per username joined with politician attributes."""
+    politicians = politicians_table_name(Params.month, Params.year)
+    logger.info("Joining x_profiles with table: %s.%s", schema, politicians)
     sql = POSTGRES_LATEST_SQL_TMPL.format(schema=schema, x_profiles=x_profiles, politicians=politicians)
     with engine.begin() as conn:
         df = pd.read_sql(text(sql), conn)

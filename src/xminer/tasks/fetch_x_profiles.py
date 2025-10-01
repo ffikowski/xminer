@@ -38,7 +38,9 @@ def _politicians_table_name(month: int, year: int) -> str:
 
 def read_usernames(limit: int | None):
     tbl = _politicians_table_name(Params.month, Params.year)  # e.g., "politicians_08_2025"
-
+    logger.info("Using politicians source table: %s (month=%s, year=%s)",
+                tbl, Params.month, Params.year)
+    
     if limit is None or limit < 0:
         q = text(f"""
             SELECT username

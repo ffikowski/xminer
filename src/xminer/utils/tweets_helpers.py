@@ -74,6 +74,11 @@ def sanitize_rows(rows: Iterable[Dict]) -> List[Dict]:
         })
     return out
 
+def politicians_table_name(month: int, year: int) -> str:
+    mm = f"{int(month):02d}"
+    yyyy = f"{int(year):04d}"
+    return f"politicians_{mm}_{yyyy}"
+
 # ---- single prepared statement (types bound) ----
 INSERT_TWEETS_STMT = text("""
     INSERT INTO tweets (

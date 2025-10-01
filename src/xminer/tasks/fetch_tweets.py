@@ -9,7 +9,7 @@ from sqlalchemy import text
 from ..config.params import Params
 from ..io.db import engine
 from ..io.x_api import client
-from ..utils.tweets_helpers import sanitize_rows, INSERT_TWEETS_STMT
+from ..utils.tweets_helpers import sanitize_rows, politicians_table_name, INSERT_TWEETS_STMT
 
 # ---------- logging ----------
 os.makedirs("logs", exist_ok=True)
@@ -35,16 +35,24 @@ def _start_time():
     return datetime.fromisoformat(val.replace("Z","+00:00"))
 
 # ---------- db ----------
-def get_all_profiles() -> List[Dict]:
-    sql = text("""
-        SELECT DISTINCT ON (x_user_id) 
-               x_user_id, username
-        FROM x_profiles
-        WHERE x_user_id IS NOT NULL
-        ORDER BY x_user_id, retrieved_at DESC
+def get_all_profiles() -> list[dict]:
+    tbl = politicians_table_name(Params.month, Params.year)
+    logger.info("Filtering x_profiles using table: %s", tbl)
+
+    sql = text(f"""
+        SELECT DISTINCT ON (xp.x_user_id)
+               xp.x_user_id,
+               xp.username
+        FROM public.x_profiles AS xp
+        JOIN public."{tbl}" AS p
+          ON p.username = xp.username
+        WHERE xp.x_user_id IS NOT NULL
+        ORDER BY xp.x_user_id, xp.retrieved_at DESC
     """)
+
     with engine.begin() as conn:
-        return [{"author_id": int(r[0]), "username": r[1]} for r in conn.execute(sql).fetchall()]
+        rows = conn.execute(sql).fetchall()
+    return [{"author_id": int(r[0]), "username": r[1]} for r in rows]
 
 def get_latest_tweet_id(author_id: int) -> Optional[str]:
     sql = text("""
@@ -148,7 +156,7 @@ def main():
     profiles = get_all_profiles()
     total_available = len(profiles)
 
-    # optional sampling
+    # optional samplings
     n = int(Params.tweets_sample_limit)
     if n >= 0:
         if Params.sample_seed is not None:
