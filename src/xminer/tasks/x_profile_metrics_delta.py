@@ -13,6 +13,7 @@ from sqlalchemy import text
 # --- Project-style imports (match your existing script) ---
 from ..io.db import engine                   # central engine built from Config.DATABASE_URL
 from ..config.params import Params           # parameters class already used in production
+from ..utils.tweets_helpers import politicians_table_name
 
 # ---------- logging ----------
 os.makedirs("logs", exist_ok=True)
@@ -35,9 +36,9 @@ def month_bounds(year: int, month: int) -> Tuple[pd.Timestamp, pd.Timestamp]:
     start = pd.Timestamp(year=year, month=month, day=1, tz=timezone.utc)
     # next month: if December, roll to Jan of next year
     if month == 12:
-        nxt = pd.Timestamp(year=year + 1, month=1, day=1, tz=timezone.utc)
+        nxt = pd.Timestamp(year=year + 1, month=1, day=2, tz=timezone.utc)
     else:
-        nxt = pd.Timestamp(year=year, month=month + 1, day=1, tz=timezone.utc)
+        nxt = pd.Timestamp(year=year, month=month + 1, day=2, tz=timezone.utc)
     return start, nxt
 
 
@@ -92,6 +93,7 @@ def load_month_snapshot(schema: str, x_profiles: str, politicians: str, year: in
     Return the latest profile per username taken at/before the start of the next month.
     This effectively gives you a month-end snapshot (or the latest available before that).
     """
+    politicians = politicians_table_name(month, year)
     _, ub = month_bounds(year, month)  # use next month start as upper bound
     ub_iso = ub.strftime("%Y-%m-%d %H:%M:%S%z")  # e.g., '2025-10-01 00:00:00+0000'
     sql = POSTGRES_SNAPSHOT_SQL_TMPL.format(
@@ -120,7 +122,7 @@ def join_prev_curr(prev_df: pd.DataFrame, curr_df: pd.DataFrame) -> pd.DataFrame
     Only accounts present in both months are included (prevents spurious spikes).
     """
     on = ["username"]
-    merged = curr_df.merge(prev_df, on=on, how="inner", suffixes=("_curr", "_prev"))
+    merged = curr_df.merge(prev_df, on=on, how="outer", suffixes=("_curr", "_prev"))
 
     # Numeric deltas (only compute if both columns exist)
     for col in ["followers_count", "following_count", "tweet_count", "listed_count"]:

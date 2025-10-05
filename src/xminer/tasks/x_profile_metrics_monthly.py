@@ -60,10 +60,9 @@ FROM joined
 WHERE rn = 1
 """
 
-
-def load_latest_profiles(schema: str, x_profiles: str, politicians: str) -> pd.DataFrame:
+def load_latest_profiles(schema: str, x_profiles: str, month: int, year: int) -> pd.DataFrame:
     """Return one latest row per username joined with politician attributes."""
-    politicians = politicians_table_name(Params.month, Params.year)
+    politicians = politicians_table_name(month, year)
     logger.info("Joining x_profiles with table: %s.%s", schema, politicians)
     sql = POSTGRES_LATEST_SQL_TMPL.format(schema=schema, x_profiles=x_profiles, politicians=politicians)
     with engine.begin() as conn:
@@ -79,7 +78,6 @@ def load_latest_profiles(schema: str, x_profiles: str, politicians: str) -> pd.D
     if "username" in df:
         df["username"] = df["username"].astype(str).str.strip()
     return df
-
 
 # -------------------------------
 # Metric computation
@@ -231,11 +229,11 @@ def build_metrics(top_n: int) -> List[MetricSpec]:
     ]
 
 
-def run(year: int, month: int, outdir: str, schema: str, x_profiles: str, politicians: str, top_n: int):
+def run(year: int, month: int, outdir: str, schema: str, x_profiles: str, top_n: int):
     os.makedirs(outdir, exist_ok=True)
     ym = f"{year:04d}{month:02d}"
 
-    latest = load_latest_profiles(schema=schema, x_profiles=x_profiles, politicians=politicians)
+    latest = load_latest_profiles(schema=schema, x_profiles=x_profiles, month=month, year=year)
 
     required_cols = {
         "username", "partei_kurz", "created_at", "verified", "protected",
@@ -266,5 +264,4 @@ if __name__ == "__main__":
     # Hard-coded table identifiers per request
     schema = "public"
     x_profiles_tbl = "x_profiles"
-    politicians_tbl = "politicians"
-    run(year, month, outdir, schema, x_profiles_tbl, politicians_tbl, top_n)
+    run(year, month, outdir, schema, x_profiles_tbl, top_n)
