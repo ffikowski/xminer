@@ -31,6 +31,21 @@ logger = logging.getLogger(__name__)
 # -------------------------------
 # Helpers
 # -------------------------------
+
+UNION_MAP = {"CDU": "CDU/CSU", "CSU": "CDU/CSU"}
+
+def normalize_party(df: pd.DataFrame) -> pd.DataFrame:
+    if "partei_kurz" in df.columns:
+        df["partei_kurz"] = (
+            df["partei_kurz"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .replace(UNION_MAP)
+        )
+    return df
+
+
 def month_bounds(year: int, month: int) -> Tuple[pd.Timestamp, pd.Timestamp]:
     """Return (month_start_utc, next_month_start_utc)."""
     start = pd.Timestamp(year=year, month=month, day=1, tz=timezone.utc)
@@ -111,6 +126,8 @@ def load_month_snapshot(schema: str, x_profiles: str, politicians: str, year: in
         df["geburtsdatum"] = pd.to_datetime(df["geburtsdatum"], utc=True, errors="coerce").dt.date
     if "username" in df:
         df["username"] = df["username"].astype(str).str.strip()
+
+    df = normalize_party(df)
 
     logger.info("Loaded snapshot for %04d-%02d: %d rows", year, month, len(df))
     return df

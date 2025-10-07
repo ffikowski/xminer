@@ -27,6 +27,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+UNION_MAP = {"CDU": "CDU/CSU", "CSU": "CDU/CSU"}
+
+def normalize_party(df: pd.DataFrame) -> pd.DataFrame:
+    if "partei_kurz" in df.columns:
+        df["partei_kurz"] = (
+            df["partei_kurz"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .replace(UNION_MAP)
+        )
+    return df
 
 # -------------------------------
 # Data access
@@ -77,6 +89,10 @@ def load_latest_profiles(schema: str, x_profiles: str, month: int, year: int) ->
     # Normalize username case
     if "username" in df:
         df["username"] = df["username"].astype(str).str.strip()
+
+    # NEW: normalize CDU/CSU union
+    df = normalize_party(df)
+    
     return df
 
 # -------------------------------
