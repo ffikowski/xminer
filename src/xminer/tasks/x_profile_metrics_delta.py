@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import os
 import logging
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import List, Tuple
+from datetime import datetime
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -13,7 +12,9 @@ from sqlalchemy import text
 # --- Project-style imports (match your existing script) ---
 from ..io.db import engine                   # central engine built from Config.DATABASE_URL
 from ..config.params import Params           # parameters class already used in production
-from ..utils.tweets_helpers import politicians_table_name
+from ..utils.global_helpers import politicians_table_name, normalize_party, UNION_MAP, month_bounds, prev_year_month, _safe_div
+from ..utils.metrics_helpers import MetricSpec, metric_individual_deltas, metric_party_delta_summary, metric_top_gainers_by_party, metric_top_gainers_global
+
 
 # ---------- logging ----------
 os.makedirs("logs", exist_ok=True)
@@ -26,49 +27,6 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
-
-
-# -------------------------------
-# Helpers
-# -------------------------------
-
-UNION_MAP = {"CDU": "CDU/CSU", "CSU": "CDU/CSU"}
-
-def normalize_party(df: pd.DataFrame) -> pd.DataFrame:
-    if "partei_kurz" in df.columns:
-        df["partei_kurz"] = (
-            df["partei_kurz"]
-            .astype(str)
-            .str.strip()
-            .str.upper()
-            .replace(UNION_MAP)
-        )
-    return df
-
-
-def month_bounds(year: int, month: int) -> Tuple[pd.Timestamp, pd.Timestamp]:
-    """Return (month_start_utc, next_month_start_utc)."""
-    start = pd.Timestamp(year=year, month=month, day=1, tz=timezone.utc)
-    # next month: if December, roll to Jan of next year
-    if month == 12:
-        nxt = pd.Timestamp(year=year + 1, month=1, day=2, tz=timezone.utc)
-    else:
-        nxt = pd.Timestamp(year=year, month=month + 1, day=2, tz=timezone.utc)
-    return start, nxt
-
-
-def prev_year_month(year: int, month: int) -> Tuple[int, int]:
-    """Return (prev_year, prev_month)."""
-    if month == 1:
-        return year - 1, 12
-    return year, month - 1
-
-
-def _safe_div(a, b):
-    with np.errstate(divide="ignore", invalid="ignore"):
-        res = np.divide(a, b)
-    return np.where(~np.isfinite(res), np.nan, res)
-
 
 # -------------------------------
 # Data access
@@ -160,103 +118,6 @@ def join_prev_curr(prev_df: pd.DataFrame, curr_df: pd.DataFrame) -> pd.DataFrame
         merged["snapshot_span_days"] = (merged["retrieved_at_curr"] - merged["retrieved_at_prev"]).dt.days
 
     return merged
-
-
-# -------------------------------
-# Metric computation (on the joined delta frame)
-# -------------------------------
-@dataclass
-class MetricSpec:
-    name: str
-    description: str
-    compute: callable  # function(delta_df) -> DataFrame
-
-
-def metric_individual_deltas(delta_df: pd.DataFrame) -> pd.DataFrame:
-    """Per-account month-over-month changes."""
-    cols = [
-        # identity
-        "username", "name_curr", "partei_kurz",
-        # raw counts (prev/curr)
-        "followers_count_prev", "followers_count_curr",
-        "following_count_prev", "following_count_curr",
-        "tweet_count_prev", "tweet_count_curr",
-        "listed_count_prev", "listed_count_curr",
-        # deltas
-        "delta_followers_count", "delta_following_count",
-        "delta_tweet_count", "delta_listed_count",
-        # pct deltas
-        "pct_followers_count", "pct_following_count",
-        "pct_tweet_count", "pct_listed_count",
-        # bookkeeping
-        "retrieved_at_prev", "retrieved_at_curr", "snapshot_span_days",
-    ]
-    existing = [c for c in cols if c in delta_df.columns]
-    result = delta_df[existing].sort_values("delta_followers_count", ascending=False, na_position="last")
-    logger.info("Computed metric_individual_deltas with %d rows", len(result))
-    return result
-
-
-def metric_party_delta_summary(delta_df: pd.DataFrame) -> pd.DataFrame:
-    """Aggregated month-over-month changes by party."""
-    if "partei_kurz" not in delta_df:
-        logger.warning("metric_party_delta_summary skipped: 'partei_kurz' missing")
-        return pd.DataFrame()
-
-    g = delta_df.groupby("partei_kurz", dropna=False)
-
-    out = g.size().rename("members_in_both").to_frame()
-
-    for col in ["followers_count", "following_count", "tweet_count", "listed_count"]:
-        dcol = f"delta_{col}"
-        if dcol in delta_df:
-            out[f"{dcol}_sum"] = g[dcol].sum()
-            out[f"{dcol}_mean"] = g[dcol].mean()
-            out[f"{dcol}_median"] = g[dcol].median()
-
-    # Order by total follower delta if available, else by members
-    sort_col = "delta_followers_count_sum" if "delta_followers_count_sum" in out.columns else "members_in_both"
-    result = out.reset_index().sort_values(sort_col, ascending=False)
-    logger.info("Computed metric_party_delta_summary with %d rows", len(result))
-    return result
-
-
-def metric_top_gainers_by_party(delta_df: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
-    """Top accounts per party by follower gains."""
-    needed = {"partei_kurz", "delta_followers_count"}
-    if not needed.issubset(delta_df.columns):
-        return pd.DataFrame()
-    df = delta_df.copy()
-    df["rank_in_party_gain"] = df.groupby("partei_kurz")["delta_followers_count"].rank(ascending=False, method="first")
-    cols = [
-        "partei_kurz", "rank_in_party_gain",
-        "username", "name_curr",
-        "followers_count_prev", "followers_count_curr", "delta_followers_count",
-        "retrieved_at_prev", "retrieved_at_curr"
-    ]
-    cols = [c for c in cols if c in df.columns]
-    result = df.loc[df["rank_in_party_gain"] <= top_n, cols].sort_values(["partei_kurz", "rank_in_party_gain"])
-    logger.info("Computed metric_top_gainers_by_party with %d rows (top_n=%d)", len(result), top_n)
-    return result
-
-
-def metric_top_gainers_global(delta_df: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
-    """Top overall follower gainers."""
-    if "delta_followers_count" not in delta_df.columns:
-        logger.warning("metric_top_gainers_global skipped: delta column missing")
-        return pd.DataFrame()
-    df = delta_df.sort_values("delta_followers_count", ascending=False).head(top_n).copy()
-    df["rank_gain_global"] = range(1, len(df) + 1)
-    cols = [
-        "rank_gain_global", "username", "name_curr", "partei_kurz",
-        "followers_count_prev", "followers_count_curr", "delta_followers_count",
-        "retrieved_at_prev", "retrieved_at_curr"
-    ]
-    cols = [c for c in cols if c in df.columns]
-    result = df[cols].reset_index(drop=True)
-    logger.info("Computed metric_top_gainers_global with %d rows (top_n=%d)", len(result), top_n)
-    return result
-
 
 # -------------------------------
 # Orchestration

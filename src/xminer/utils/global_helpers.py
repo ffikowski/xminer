@@ -1,8 +1,10 @@
 # src/xminer/ingest_helpers.py
 from __future__ import annotations
 import json, math
+import pandas as pd
+import numpy as np
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Tuple
 from sqlalchemy import text, bindparam, BigInteger, Text, JSON
 
 # ---- tiny coercers ----
@@ -134,3 +136,39 @@ INSERT_TWEETS_STMT = text("""
     bindparam("referenced_tweets",   type_=JSON()),
     bindparam("retrieved_at"),
 )
+
+UNION_MAP = {"CDU": "CDU/CSU", "CSU": "CDU/CSU"}
+
+def normalize_party(df: pd.DataFrame) -> pd.DataFrame:
+    if "partei_kurz" in df.columns:
+        df["partei_kurz"] = (
+            df["partei_kurz"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .replace(UNION_MAP)
+        )
+    return df
+
+def month_bounds(year: int, month: int) -> Tuple[pd.Timestamp, pd.Timestamp]:
+    """Return (month_start_utc, next_month_start_utc)."""
+    start = pd.Timestamp(year=year, month=month, day=1, tz=timezone.utc)
+    # next month: if December, roll to Jan of next year
+    if month == 12:
+        nxt = pd.Timestamp(year=year + 1, month=1, day=2, tz=timezone.utc)
+    else:
+        nxt = pd.Timestamp(year=year, month=month + 1, day=2, tz=timezone.utc)
+    return start, nxt
+
+
+def prev_year_month(year: int, month: int) -> Tuple[int, int]:
+    """Return (prev_year, prev_month)."""
+    if month == 1:
+        return year - 1, 12
+    return year, month - 1
+
+
+def _safe_div(a, b):
+    with np.errstate(divide="ignore", invalid="ignore"):
+        res = np.divide(a, b)
+    return np.where(~np.isfinite(res), np.nan, res)

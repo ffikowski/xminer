@@ -9,7 +9,7 @@ from sqlalchemy import text
 from ..config.params import Params
 from ..io.db import engine
 from ..io.x_api import client
-from ..utils.tweets_helpers import sanitize_rows, politicians_table_name, INSERT_TWEETS_STMT
+from ..utils.global_helpers import sanitize_rows, politicians_table_name, INSERT_TWEETS_STMT
 
 # ---------- logging ----------
 os.makedirs("logs", exist_ok=True)
