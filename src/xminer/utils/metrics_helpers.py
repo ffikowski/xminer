@@ -327,3 +327,124 @@ def metric_top_tweets(out: pd.DataFrame, top_n: int = 50) -> pd.DataFrame:
     df = df.sort_values(["engagement_rate", "engagement_total"], ascending=[False, False]).head(top_n).reset_index(drop=True)
     logger.info("Computed metric_top_tweets with %d rows (top_n=%d)", len(df), top_n)
     return df
+
+def metric_top_tweets_by(out: pd.DataFrame, metric: str, top_n: int = 10, ascending: bool = False) -> pd.DataFrame:
+    """Generic helper: top or bottom tweets by a given metric."""
+    if metric not in out.columns:
+        logger.warning("Column '%s' not found; skipping metric_top_tweets_by.", metric)
+        return pd.DataFrame()
+    cols = [
+        "tweet_id", "username", "partei_kurz", "created_at", "text",
+        "like_count", "reply_count", "retweet_count", "quote_count",
+        "impression_count", "engagement_total", "engagement_rate"
+    ]
+    cols = [c for c in cols if c in out.columns]
+    df = out[cols + [metric]].copy()
+    df = df.sort_values(metric, ascending=ascending).head(top_n).reset_index(drop=True)
+    logger.info("Computed top tweets by %s (%s)", metric, "ascending" if ascending else "descending")
+    return df
+
+def metric_top_tweets_by_flex(
+    out: pd.DataFrame,
+    metric: str,
+    top_n: int = 10,
+    ascending: bool = False,
+    min_impressions: int | None = None,
+    dropna: bool = True,
+) -> pd.DataFrame:
+    if metric not in out.columns:
+        logger.warning("Column '%s' not found; skipping.", metric)
+        return pd.DataFrame()
+    df = out.copy()
+    if min_impressions is not None and "impression_count" in df.columns:
+        df = df[df["impression_count"] >= min_impressions]
+    if dropna:
+        df = df[np.isfinite(df[metric])]
+    cols = [
+        "tweet_id","username","partei_kurz","created_at","text","lang",
+        "like_count","reply_count","retweet_count","quote_count","bookmark_count",
+        "impression_count","engagement_total","engagement_rate", metric
+    ]
+    cols = [c for c in cols if c in df.columns]
+    df = df.sort_values([metric, "engagement_total"], ascending=[ascending, False]).head(top_n)
+    logger.info("Leaderboard by %s (asc=%s, min_impr=%s) -> %d rows",
+                metric, ascending, min_impressions, len(df))
+    return df[cols].reset_index(drop=True)
+
+
+def metric_bottom_tweets_by_engagement_rate(out: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
+    return metric_top_tweets_by(out, "engagement_rate", top_n, ascending=True)
+
+def metric_top_tweets_by_likes(out: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
+    return metric_top_tweets_by(out, "like_count", top_n)
+
+def metric_top_tweets_by_reply_ratio(out: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
+    if "like_to_reply" not in out.columns:
+        logger.warning("Missing like_to_reply ratio.")
+        return pd.DataFrame()
+    return metric_top_tweets_by(out, "like_to_reply", top_n, ascending=True)
+
+def metric_top_tweets_by_retweets(out, top_n=10):
+    return metric_top_tweets_by(out, "retweet_count", top_n)
+
+def metric_top_tweets_by_replies(out, top_n=10):
+    return metric_top_tweets_by(out, "reply_count", top_n)
+
+def metric_top_tweets_by_quotes(out, top_n=10):
+    return metric_top_tweets_by(out, "quote_count", top_n)
+
+def metric_top_tweets_by_bookmarks(out, top_n=10):
+    return metric_top_tweets_by(out, "bookmark_count", top_n)
+
+def metric_top_tweets_by_impressions(out, top_n=10):
+    return metric_top_tweets_by(out, "impression_count", top_n)
+
+def metric_top_tweets_by_likes_per_1k(out, top_n=10):
+    return metric_top_tweets_by_flex(out, "likes_per_1k_followers", top_n)
+
+def metric_top_tweets_by_engagement_per_1k(out, top_n=10):
+    return metric_top_tweets_by_flex(out, "engagement_per_1k_followers", top_n)
+
+def metric_bottom_tweets_by_engagement_per_1k(out, top_n=10, min_impressions=1000):
+    return metric_top_tweets_by_flex(out, "engagement_per_1k_followers", top_n, ascending=True, min_impressions=min_impressions)
+
+def metric_most_controversial(out, top_n=10, min_impressions=1000):
+    # (replies + quotes) / max(likes, 1)
+    df = out.copy()
+    likes = df["like_count"].replace(0, np.nan) if "like_count" in df else np.nan
+    num = df.get("reply_count", np.nan) + df.get("quote_count", np.nan)
+    df["controversy_score"] = _safe_div(num, likes)
+    return metric_top_tweets_by_flex(df, "controversy_score", top_n, min_impressions=min_impressions)
+
+def metric_most_reply_heavy(out, top_n=10, min_impressions=1000):
+    # replies / engagement_total
+    df = out.copy()
+    df["reply_share"] = _safe_div(df.get("reply_count", np.nan), df["engagement_total"].replace(0, np.nan))
+    return metric_top_tweets_by_flex(df, "reply_share", top_n, min_impressions=min_impressions)
+
+def metric_most_quote_heavy(out, top_n=10, min_impressions=1000):
+    df = out.copy()
+    df["quote_share"] = _safe_div(df.get("quote_count", np.nan), df["engagement_total"].replace(0, np.nan))
+    return metric_top_tweets_by_flex(df, "quote_share", top_n, min_impressions=min_impressions)
+
+def metric_most_amplified_debate(out, top_n=10, min_impressions=1000):
+    # (retweets + quotes) / impressions
+    df = out.copy()
+    df["amplification_rate"] = _rate(df, numer=None) if False else _safe_div(df.get("retweet_count", np.nan) + df.get("quote_count", np.nan), df.get("impression_count", np.nan))
+    return metric_top_tweets_by_flex(df, "amplification_rate", top_n, min_impressions=min_impressions)
+
+def metric_most_controversial_by_like_to_reply(out, top_n=10, min_impressions=1000):
+    # Smallest like_to_reply = most controversial
+    return metric_top_tweets_by_flex(out, "like_to_reply", top_n, ascending=True, min_impressions=min_impressions)
+
+def metric_low_conversion_high_reach(out, top_n=10, min_impressions=10000):
+    # lowest engagement rate among tweets with large reach
+    return metric_top_tweets_by_flex(out, "engagement_rate", top_n, ascending=True, min_impressions=min_impressions)
+
+def metric_silent_hits(out, top_n=10, max_impressions=5000):
+    # very good conversion with small reach
+    df = out.copy()
+    if "impression_count" in df:
+        df = df[df["impression_count"] <= max_impressions]
+    return metric_top_tweets_by_flex(df, "engagement_rate", top_n)
+

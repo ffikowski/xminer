@@ -13,7 +13,39 @@ from ..io.db import engine  # central engine from Config.DATABASE_URL
 from ..config.params import Params  # parameters class used in production
 
 from ..utils.global_helpers import politicians_table_name, normalize_party, UNION_MAP, month_bounds, _safe_div
-from ..utils.metrics_helpers import MetricSpec, metric_individual_month, metric_party_month, metric_top_tweets, enrich_with_profiles
+# --- add/replace this import block near the top ---
+from ..utils.metrics_helpers import (
+    MetricSpec,
+    enrich_with_profiles,
+    # summaries
+    metric_individual_month,
+    metric_party_month,
+    # leaderboards (absolute)
+    metric_top_tweets,  # engagement_rate (canonical top)
+    metric_bottom_tweets_by_engagement_rate,
+    metric_top_tweets_by_likes,
+    metric_top_tweets_by_retweets,
+    metric_top_tweets_by_replies,
+    metric_top_tweets_by_quotes,
+    metric_top_tweets_by_bookmarks,
+    metric_top_tweets_by_impressions,
+    # follower-normalized
+    metric_top_tweets_by_likes_per_1k,
+    metric_top_tweets_by_engagement_per_1k,
+    metric_bottom_tweets_by_engagement_per_1k,
+    # controversy / “shitstorm”
+    metric_most_controversial,
+    metric_most_reply_heavy,
+    metric_most_quote_heavy,
+    metric_most_amplified_debate,
+    metric_most_controversial_by_like_to_reply,
+    # conversion patterns
+    metric_low_conversion_high_reach,
+    metric_silent_hits,
+    # author-level
+    metric_top_authors_by_avg_engagement_rate,
+    metric_most_active_authors,
+)
 
 # ---------- logging ----------
 os.makedirs("logs", exist_ok=True)
@@ -129,8 +161,10 @@ def load_tweets_month(schema: str, tweets: str, month: int, year: int, start_ts:
 # -------------------------------
 # Orchestration
 # -------------------------------
+# --- replace your build_metrics(...) with this ---
 def build_metrics(top_n: int) -> List[MetricSpec]:
     return [
+        # Account / party summaries
         MetricSpec(
             name="tweets_individual_month",
             description="Per-politician monthly tweet metrics (averages, ratios, follower-normalized)",
@@ -141,12 +175,118 @@ def build_metrics(top_n: int) -> List[MetricSpec]:
             description="Party-level monthly tweet aggregates and rates",
             compute=metric_party_month,
         ),
+
+        # Core engagement-rate boards
         MetricSpec(
-            name="tweets_top_tweets",
+            name="tweets_top_by_engagement_rate",
             description=f"Top {top_n} tweets by engagement rate in the month",
             compute=lambda df: metric_top_tweets(df, top_n=top_n),
         ),
+        MetricSpec(
+            name="tweets_bottom_by_engagement_rate",
+            description=f"Bottom {top_n} tweets by engagement rate (min reach guard)",
+            compute=lambda df: metric_bottom_tweets_by_engagement_rate(df, top_n=top_n),
+        ),
+        MetricSpec(
+            name="tweets_top_by_likes",
+            description=f"Top {top_n} tweets by likes",
+            compute=lambda df: metric_top_tweets_by_likes(df, top_n=top_n),
+        ),
+        MetricSpec(
+            name="tweets_top_by_retweets",
+            description=f"Top {top_n} tweets by retweets",
+            compute=lambda df: metric_top_tweets_by_retweets(df, top_n=top_n),
+        ),
+        MetricSpec(
+            name="tweets_top_by_replies",
+            description=f"Top {top_n} tweets by replies",
+            compute=lambda df: metric_top_tweets_by_replies(df, top_n=top_n),
+        ),
+        MetricSpec(
+            name="tweets_top_by_quotes",
+            description=f"Top {top_n} tweets by quotes",
+            compute=lambda df: metric_top_tweets_by_quotes(df, top_n=top_n),
+        ),
+        MetricSpec(
+            name="tweets_top_by_bookmarks",
+            description=f"Top {top_n} tweets by bookmarks",
+            compute=lambda df: metric_top_tweets_by_bookmarks(df, top_n=top_n),
+        ),
+        MetricSpec(
+            name="tweets_top_by_impressions",
+            description=f"Top {top_n} tweets by impressions",
+            compute=lambda df: metric_top_tweets_by_impressions(df, top_n=top_n),
+        ),
+
+        # Follower-normalized leaderboards
+        MetricSpec(
+            name="tweets_top_by_likes_per_1k_followers",
+            description=f"Top {top_n} tweets by likes per 1k followers",
+            compute=lambda df: metric_top_tweets_by_likes_per_1k(df, top_n=top_n),
+        ),
+        MetricSpec(
+            name="tweets_top_by_engagement_per_1k_followers",
+            description=f"Top {top_n} tweets by engagement per 1k followers",
+            compute=lambda df: metric_top_tweets_by_engagement_per_1k(df, top_n=top_n),
+        ),
+        MetricSpec(
+            name="tweets_bottom_by_engagement_per_1k_followers",
+            description=f"Bottom {top_n} tweets by engagement per 1k followers (min reach guard)",
+            compute=lambda df: metric_bottom_tweets_by_engagement_per_1k(df, top_n=top_n),
+        ),
+
+        # Controversy / “shitstorm” indicators
+        MetricSpec(
+            name="tweets_most_controversial",
+            description=f"Top {top_n} most controversial tweets ((replies+quotes) / likes)",
+            compute=lambda df: metric_most_controversial(df, top_n=top_n),
+        ),
+        MetricSpec(
+            name="tweets_most_reply_heavy",
+            description=f"Top {top_n} by reply share of engagement (replies / engagement_total)",
+            compute=lambda df: metric_most_reply_heavy(df, top_n=top_n),
+        ),
+        MetricSpec(
+            name="tweets_most_quote_heavy",
+            description=f"Top {top_n} by quote share of engagement (quotes / engagement_total)",
+            compute=lambda df: metric_most_quote_heavy(df, top_n=top_n),
+        ),
+        MetricSpec(
+            name="tweets_most_amplified_debate",
+            description=f"Top {top_n} by amplification rate ((retweets+quotes) / impressions)",
+            compute=lambda df: metric_most_amplified_debate(df, top_n=top_n),
+        ),
+        MetricSpec(
+            name="tweets_most_controversial_by_like_to_reply",
+            description=f"Top {top_n} most controversial (lowest like-to-reply ratio)",
+            compute=lambda df: metric_most_controversial_by_like_to_reply(df, top_n=top_n),
+        ),
+
+        # Conversion patterns
+        MetricSpec(
+            name="tweets_low_conversion_high_reach",
+            description=f"Top {top_n} low-conversion tweets (high impressions, low engagement rate)",
+            compute=lambda df: metric_low_conversion_high_reach(df, top_n=top_n),
+        ),
+        MetricSpec(
+            name="tweets_silent_hits",
+            description=f"Top {top_n} silent hits (high engagement rate at low reach)",
+            compute=lambda df: metric_silent_hits(df, top_n=top_n),
+        ),
+
+        # Author-level
+        MetricSpec(
+            name="authors_top_avg_engagement_rate",
+            description=f"Top {top_n} authors by avg engagement rate (min tweets threshold inside)",
+            compute=lambda df: metric_top_authors_by_avg_engagement_rate(df, top_n=top_n),
+        ),
+        MetricSpec(
+            name="authors_most_active",
+            description=f"Top {top_n} most active authors (tweets this month)",
+            compute=lambda df: metric_most_active_authors(df, top_n=top_n),
+        ),
     ]
+
 
 def run(year: int, month: int, outdir: str, schema: str, tweets_tbl: str, x_profiles_tbl: str, top_n: int):
     os.makedirs(outdir, exist_ok=True)
