@@ -12,7 +12,7 @@ from sqlalchemy import text
 from ..io.db import engine  # central engine from Config.DATABASE_URL
 from ..config.params import Params  # parameters class used in production
 
-from ..utils.global_helpers import politicians_table_name, normalize_party, UNION_MAP, month_bounds, _safe_div
+from ..utils.global_helpers import politicians_table_name, normalize_party, UNION_MAP, month_bounds, _safe_div, build_outdir
 # --- add/replace this import block near the top ---
 from ..utils.metrics_helpers import (
     MetricSpec,
@@ -289,7 +289,7 @@ def build_metrics(top_n: int) -> List[MetricSpec]:
 
 
 def run(year: int, month: int, outdir: str, schema: str, tweets_tbl: str, x_profiles_tbl: str, top_n: int):
-    os.makedirs(outdir, exist_ok=True)
+    outdir_tweets = build_outdir(outdir, year, month, "tweets")
     ym = f"{year:04d}{month:02d}"
 
     # bounds for month (UTC)
@@ -309,7 +309,7 @@ def run(year: int, month: int, outdir: str, schema: str, tweets_tbl: str, x_prof
     # compute & write
     for spec in build_metrics(top_n=top_n):
         df_metric = spec.compute(dataset)
-        out_path = os.path.join(outdir, f"{spec.name}_{ym}.csv")
+        out_path = os.path.join(outdir_tweets, f"{spec.name}_{ym}.csv")
         df_metric.to_csv(out_path, index=False)
         logger.info("Wrote %s -> %s", spec.description, out_path)
 

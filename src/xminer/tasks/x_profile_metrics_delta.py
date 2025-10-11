@@ -12,7 +12,7 @@ from sqlalchemy import text
 # --- Project-style imports (match your existing script) ---
 from ..io.db import engine                   # central engine built from Config.DATABASE_URL
 from ..config.params import Params           # parameters class already used in production
-from ..utils.global_helpers import politicians_table_name, normalize_party, UNION_MAP, month_bounds, prev_year_month, _safe_div
+from ..utils.global_helpers import politicians_table_name, normalize_party, UNION_MAP, month_bounds, prev_year_month, _safe_div, build_outdir
 from ..utils.metrics_helpers import MetricSpec, metric_individual_deltas, metric_party_delta_summary, metric_top_gainers_by_party, metric_top_gainers_global
 
 
@@ -152,7 +152,7 @@ def run(year: int, month: int, outdir: str, schema: str, x_profiles: str, politi
     Compute month-over-month metrics for the target year-month vs its previous month.
     Writes one CSV per metric into outdir with the suffix YYYYMM (the *current* month).
     """
-    os.makedirs(outdir, exist_ok=True)
+    outdir_profiles = build_outdir(outdir, year, month, "profiles")
     ym = f"{year:04d}{month:02d}"
     prev_y, prev_m = prev_year_month(year, month)
 
@@ -182,7 +182,7 @@ def run(year: int, month: int, outdir: str, schema: str, x_profiles: str, politi
 
     for spec in build_delta_metrics(top_n=top_n):
         out = spec.compute(delta_df)
-        out_path = os.path.join(outdir, f"{spec.name}_{ym}.csv")
+        out_path = os.path.join(outdir_profiles, f"{spec.name}_{ym}.csv")
         out.to_csv(out_path, index=False)
         logger.info("Wrote %s -> %s", spec.description, out_path)
 

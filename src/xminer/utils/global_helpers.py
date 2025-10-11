@@ -1,6 +1,6 @@
 # src/xminer/ingest_helpers.py
 from __future__ import annotations
-import json, math
+import json, math, os
 import pandas as pd
 import numpy as np
 from datetime import datetime, timezone
@@ -172,3 +172,9 @@ def _safe_div(a, b):
     with np.errstate(divide="ignore", invalid="ignore"):
         res = np.divide(a, b)
     return np.where(~np.isfinite(res), np.nan, res)
+
+def build_outdir(base_outdir: str, year: int, month: int, channel: str) -> str:
+    ym = f"{year:04d}{month:02d}"
+    path = os.path.join(base_outdir, ym, channel)
+    os.makedirs(path, exist_ok=True)
+    return path

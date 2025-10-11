@@ -13,7 +13,7 @@ from sqlalchemy import text
 # --- Project-style imports (match fetch_tweets) ---
 from ..io.db import engine  # central engine built from Config.DATABASE_URL
 from ..config.params import Params  # parameters class already used in production
-from ..utils.global_helpers import politicians_table_name, normalize_party, UNION_MAP
+from ..utils.global_helpers import politicians_table_name, normalize_party, UNION_MAP, build_outdir
 from ..utils.metrics_helpers import MetricSpec, metric_individual_base, metric_party_summary, metric_top_accounts_by_party, metric_top_accounts_global
 
 # ---------- logging ----------
@@ -113,7 +113,7 @@ def build_metrics(top_n: int) -> List[MetricSpec]:
 
 
 def run(year: int, month: int, outdir: str, schema: str, x_profiles: str, top_n: int):
-    os.makedirs(outdir, exist_ok=True)
+    outdir_profiles = build_outdir(outdir, year, month, "profiles")
     ym = f"{year:04d}{month:02d}"
 
     latest = load_latest_profiles(schema=schema, x_profiles=x_profiles, month=month, year=year)
@@ -128,7 +128,7 @@ def run(year: int, month: int, outdir: str, schema: str, x_profiles: str, top_n:
 
     for spec in build_metrics(top_n=top_n):
         df_metric = spec.compute(latest)
-        out_path = os.path.join(outdir, f"{spec.name}_{ym}.csv")
+        out_path = os.path.join(outdir_profiles, f"{spec.name}_{ym}.csv")
         df_metric.to_csv(out_path, index=False)
         logger.info("Wrote %s -> %s", spec.description, out_path)
 
