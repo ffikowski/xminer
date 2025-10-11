@@ -207,3 +207,123 @@ def metric_top_gainers_global(delta_df: pd.DataFrame, top_n: int = 10) -> pd.Dat
     result = df[cols].reset_index(drop=True)
     logger.info("Computed metric_top_gainers_global with %d rows (top_n=%d)", len(result), top_n)
     return result
+
+def enrich_with_profiles(tweets_df: pd.DataFrame, prof_df: pd.DataFrame) -> pd.DataFrame:
+    """Attach latest profile fields used for follower-based ratios to each tweet."""
+    use_cols = [c for c in ["username", "name", "followers_count", "following_count", "tweet_count", "listed_count", "verified", "protected"] if c in prof_df.columns]
+    prof_small = prof_df[use_cols].drop_duplicates("username") if "username" in prof_df else prof_df
+    out = tweets_df.merge(prof_small, on="username", how="left", suffixes=("", "_profile"))
+    # precompute per-tweet engagement components
+    for c in ["like_count", "reply_count", "retweet_count", "quote_count", "bookmark_count", "impression_count"]:
+        if c not in out:
+            out[c] = np.nan
+    out["engagement_total"] = out[["like_count", "reply_count", "retweet_count", "quote_count", "bookmark_count"]].sum(axis=1, min_count=1)
+    out["engagement_rate"] = _safe_div(out["engagement_total"], out["impression_count"])
+    out["like_to_reply"] = _safe_div(out["like_count"], out["reply_count"])
+    out["retweet_to_like"] = _safe_div(out["retweet_count"], out["like_count"])
+    # follower-normalized per tweet
+    followers_k = _safe_div(out["followers_count"], 1000.0)
+    out["likes_per_1k_followers"] = _safe_div(out["like_count"], followers_k)
+    out["engagement_per_1k_followers"] = _safe_div(out["engagement_total"], followers_k)
+    return out
+
+def metric_individual_month(out: pd.DataFrame) -> pd.DataFrame:
+    """Per-politician metrics for the month (averages per post, ratios, follower-normalized)."""
+    if "username" not in out.columns:
+        logger.warning("metric_individual_month skipped: 'username' column missing")
+        return pd.DataFrame()
+
+    g = out.groupby(["partei_kurz", "username"], dropna=False)
+
+    agg = g.agg(
+        n_tweets=("tweet_id", "count"),
+        likes_sum=("like_count", "sum"),
+        likes_mean=("like_count", "mean"),
+        replies_sum=("reply_count", "sum"),
+        replies_mean=("reply_count", "mean"),
+        retweets_sum=("retweet_count", "sum"),
+        retweets_mean=("retweet_count", "mean"),
+        quotes_sum=("quote_count", "sum"),
+        quotes_mean=("quote_count", "mean"),
+        bookmarks_sum=("bookmark_count", "sum"),
+        bookmarks_mean=("bookmark_count", "mean"),
+        impressions_sum=("impression_count", "sum"),
+        impressions_mean=("impression_count", "mean"),
+        engagement_sum=("engagement_total", "sum"),
+        engagement_mean=("engagement_total", "mean"),
+        engagement_rate_mean=("engagement_rate", "mean"),
+        like_to_reply_mean=("like_to_reply", "mean"),
+        retweet_to_like_mean=("retweet_to_like", "mean"),
+        likes_per_1k_followers_mean=("likes_per_1k_followers", "mean"),
+        engagement_per_1k_followers_mean=("engagement_per_1k_followers", "mean"),
+        verified_share=("verified", "mean"),
+        protected_share=("protected", "mean"),
+        followers_latest=("followers_count", "max"),
+    ).reset_index()
+
+    # Derived stable ratios (across totals)
+    agg["like_to_reply_total_ratio"] = _safe_div(agg["likes_sum"], agg["replies_sum"])
+    agg["retweet_to_like_total_ratio"] = _safe_div(agg["retweets_sum"], agg["likes_sum"])
+    agg["engagement_rate_total"] = _safe_div(agg["engagement_sum"], agg["impressions_sum"])
+
+    # presentation order
+    cols = [
+        "partei_kurz", "username", "n_tweets",
+        "likes_mean", "replies_mean", "retweets_mean", "quotes_mean", "bookmarks_mean", "impressions_mean",
+        "engagement_mean", "engagement_rate_mean",
+        "like_to_reply_mean", "retweet_to_like_mean",
+        "likes_per_1k_followers_mean", "engagement_per_1k_followers_mean",
+        "likes_sum", "replies_sum", "retweets_sum", "quotes_sum", "bookmarks_sum", "impressions_sum", "engagement_sum",
+        "like_to_reply_total_ratio", "retweet_to_like_total_ratio", "engagement_rate_total",
+        "followers_latest", "verified_share", "protected_share",
+    ]
+    cols = [c for c in cols if c in agg.columns]
+    result = agg[cols].sort_values(["partei_kurz", "n_tweets"], ascending=[True, False])
+    logger.info("Computed metric_individual_month with %d rows", len(result))
+    return result
+
+def metric_party_month(out: pd.DataFrame) -> pd.DataFrame:
+    """Party-level monthly aggregates across all tweets in the month."""
+    if "partei_kurz" not in out.columns:
+        logger.warning("metric_party_month skipped: 'partei_kurz' column missing")
+        return pd.DataFrame()
+
+    g = out.groupby("partei_kurz", dropna=False)
+
+    summary = g.agg(
+        tweets=("tweet_id", "count"),
+        likes_sum=("like_count", "sum"),
+        replies_sum=("reply_count", "sum"),
+        retweets_sum=("retweet_count", "sum"),
+        quotes_sum=("quote_count", "sum"),
+        bookmarks_sum=("bookmark_count", "sum"),
+        impressions_sum=("impression_count", "sum"),
+        engagement_sum=("engagement_total", "sum"),
+        engagement_rate_mean=("engagement_rate", "mean"),
+        like_to_reply_mean=("like_to_reply", "mean"),
+        retweet_to_like_mean=("retweet_to_like", "mean"),
+        likes_per_1k_followers_mean=("likes_per_1k_followers", "mean"),
+        engagement_per_1k_followers_mean=("engagement_per_1k_followers", "mean"),
+        verified_share=("verified", "mean"),
+        protected_share=("protected", "mean"),
+    )
+
+    # Totals-based engagement rate (robust vs mean of per-tweet rates)
+    summary["engagement_rate_total"] = _safe_div(summary["engagement_sum"], summary["impressions_sum"])
+    result = summary.reset_index().sort_values("engagement_sum", ascending=False)
+    logger.info("Computed metric_party_month with %d rows", len(result))
+    return result
+
+def metric_top_tweets(out: pd.DataFrame, top_n: int = 50) -> pd.DataFrame:
+    """Top tweets of the month by engagement rate, then by absolute engagement."""
+    keep = [
+        "tweet_id", "username", "partei_kurz", "created_at", "text", "lang",
+        "like_count", "reply_count", "retweet_count", "quote_count", "bookmark_count",
+        "impression_count", "engagement_total", "engagement_rate",
+        "likes_per_1k_followers", "engagement_per_1k_followers",
+    ]
+    keep = [c for c in keep if c in out.columns]
+    df = out[keep].copy()
+    df = df.sort_values(["engagement_rate", "engagement_total"], ascending=[False, False]).head(top_n).reset_index(drop=True)
+    logger.info("Computed metric_top_tweets with %d rows (top_n=%d)", len(df), top_n)
+    return df
