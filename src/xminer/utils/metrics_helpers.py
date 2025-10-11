@@ -363,11 +363,11 @@ def metric_top_tweets_by_flex(
         df = df[df["impression_count"] >= min_impressions]
     if dropna:
         df = df[np.isfinite(df[metric])]
-    cols = [
+    cols = list(set([
         "tweet_id","username","partei_kurz","created_at","text","lang",
         "like_count","reply_count","retweet_count","quote_count","bookmark_count",
         "impression_count","engagement_total","engagement_rate", metric
-    ]
+    ]))
     cols = [c for c in cols if c in df.columns]
     df = df.sort_values([metric, "engagement_total"], ascending=[ascending, False]).head(top_n)
     logger.info("Leaderboard by %s (asc=%s, min_impr=%s) -> %d rows",
