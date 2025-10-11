@@ -448,3 +448,20 @@ def metric_silent_hits(out, top_n=10, max_impressions=5000):
         df = df[df["impression_count"] <= max_impressions]
     return metric_top_tweets_by_flex(df, "engagement_rate", top_n)
 
+def metric_top_authors_by_avg_engagement_rate(out: pd.DataFrame, top_n: int = 10, min_tweets: int = 5) -> pd.DataFrame:
+    if "username" not in out or "engagement_rate" not in out:
+        return pd.DataFrame()
+    g = out.groupby(["partei_kurz", "username"], dropna=False)
+    agg = g.agg(n_tweets=("tweet_id", "count"), avg_engagement_rate=("engagement_rate", "mean"),
+    impressions_sum=("impression_count", "sum"), engagement_sum=("engagement_total", "sum"))
+    agg = agg[agg["n_tweets"] >= min_tweets]
+    agg = agg.sort_values(["avg_engagement_rate", "engagement_sum"], ascending=[False, False]).head(top_n)
+    return agg.reset_index()
+
+
+def metric_most_active_authors(out: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
+    if "username" not in out:
+        return pd.DataFrame()
+    g = out.groupby(["partei_kurz", "username"], dropna=False).size().rename("n_tweets").reset_index()
+    return g.sort_values(["n_tweets"], ascending=False).head(top_n)
+
