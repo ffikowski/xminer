@@ -340,6 +340,7 @@ def metric_top_tweets_by(out: pd.DataFrame, metric: str, top_n: int = 10, ascend
     ]
     cols = [c for c in cols if c in out.columns]
     df = out[cols + [metric]].copy()
+    print(df.columns)
     df = df.sort_values(metric, ascending=ascending).head(top_n).reset_index(drop=True)
     logger.info("Computed top tweets by %s (%s)", metric, "ascending" if ascending else "descending")
     return df
