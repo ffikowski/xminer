@@ -32,3 +32,5 @@ tweet_fields:
   - entities
   - referenced_tweets
 rate_limit_fallback_sleep: 901
+trends_woeid: 23424829
+trends_place_name: "Germany"

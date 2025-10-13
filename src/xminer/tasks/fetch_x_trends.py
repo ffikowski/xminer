@@ -28,10 +28,9 @@ logger = logging.getLogger(__name__)
 # https://docs.x.com/x-api/trends/trends-by-woeid/introduction
 TRENDS_URL_TMPL = "https://api.x.com/2/trends/by/woeid/{woeid}"
 
-# Germany WOEID (country)
-# Example list (also shown on v1.1 page): Germany: 23424829
-GERMANY_WOEID = int(os.getenv("TRENDS_WOEID", "23424829"))
-PLACE_NAME = os.getenv("TRENDS_PLACE_NAME", "Germany")
+# Read from parameters.yml via Params (instead of env vars)
+GERMANY_WOEID = int(getattr(Params, "trends_woeid", 23424829))
+PLACE_NAME    = getattr(Params, "trends_place_name", "Germany")
 
 # ---------- db helpers ----------
 CREATE_TABLE_SQL = """

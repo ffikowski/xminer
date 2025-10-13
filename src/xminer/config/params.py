@@ -52,3 +52,7 @@ class Params:
     month  = int(_loaded.get("month", 9))
     outdir = _loaded.get("outdir", "output")
     top_n  = int(_loaded.get("top_n", 10))
+
+    # X Trends params
+    trends_woeid = int(_loaded.get("trends_woeid", 23424829))
+    trends_place_name = _loaded.get("trends_place_name", "Germany")
