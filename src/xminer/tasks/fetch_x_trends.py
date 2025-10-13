@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS public.x_trends (
     place_name      TEXT         NOT NULL,
     trend_name      TEXT         NOT NULL,
     tweet_count     BIGINT,
+    rank            INTEGER,
     retrieved_at    TIMESTAMPTZ  NOT NULL,
     source_version  TEXT         NOT NULL DEFAULT 'v2'
 );
@@ -50,8 +51,8 @@ ON public.x_trends (woeid, retrieved_at, trend_name);
 
 UPSERT_SQL = text("""
 INSERT INTO public.x_trends
-(woeid, place_name, trend_name, tweet_count, retrieved_at, source_version)
-VALUES (:woeid, :place_name, :trend_name, :tweet_count, :retrieved_at, :source_version)
+(woeid, place_name, trend_name, tweet_count, rank, retrieved_at, source_version)
+VALUES (:woeid, :place_name, :trend_name, :tweet_count, :rank, :retrieved_at, :source_version)
 ON CONFLICT (woeid, retrieved_at, trend_name) DO UPDATE
 SET tweet_count = EXCLUDED.tweet_count,
     source_version = EXCLUDED.source_version
@@ -84,12 +85,13 @@ def upsert_trends(woeid: int, place_name: str, items: List[Dict[str, Any]]) -> i
         return 0
     now = datetime.now(timezone.utc)
     rows = []
-    for it in items:
+    for idx, it in enumerate(items, start=1):
         rows.append({
             "woeid": woeid,
             "place_name": place_name,
             "trend_name": it.get("trend_name"),
             "tweet_count": it.get("tweet_count"),
+            "rank": idx,
             "retrieved_at": now,
             "source_version": "v2",
         })
