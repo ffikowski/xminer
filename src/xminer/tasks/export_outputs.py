@@ -40,14 +40,14 @@ def main(argv=None) -> int:
         return getattr(P, key, getattr(P, "get", lambda k, d=None: d)(key, default))
 
     ssh = {
-        "host": g("ssh_host"),
-        "user": g("ssh_user"),
-        "port": int(g("ssh_port", 22)),
-        "identity_file": g("ssh_identity_file"),
+        "host": P.EXPORT_SSH_HOST,
+        "user": P.EXPORT_SSH_USER,
+        "port": int(P.EXPORT_SSH_PORT),
+        "identity_file": P.EXPORT_SSH_IDENTITY_FILE,
     }
-    remote_base = g("remote_base_dir")
-    patterns = list(g("export_patterns", []))
-    local_dest = Path(_expand(g("local_dest_dir")) or "")
+    remote_base = P.EXPORT_REMOTE_BASE_DIR
+    patterns = list(P.EXPORT_PATTERNS or [])
+    local_dest = Path(_expand(P.EXPORT_LOCAL_DEST_DIR or ""))
 
     parser = argparse.ArgumentParser(description="Export specific CSV files from VPS to local directory.")
     parser.add_argument("--dry-run", action="store_true")

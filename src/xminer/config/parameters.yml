@@ -44,4 +44,4 @@ remote_base_dir: "/home/app/apps/xminer/output"
 export_patterns:
   - "202509/tweets/tweets_individual_month_202509.csv"
   - "202509/profiles/*.csv"
-local_dest_dir: "/Users/you/xminer-exports/202509"
+local_dest_dir: "C:/Users/felix/Documents/xminer/outputs"
