@@ -56,3 +56,14 @@ class Params:
     # X Trends params
     trends_woeid = int(_loaded.get("trends_woeid", 23424829))
     trends_place_name = _loaded.get("trends_place_name", "Germany")
+
+    # --- export settings ---
+    EXPORT_SSH_HOST = _loaded.get("ssh_host")
+    EXPORT_SSH_USER = _loaded.get("ssh_user")
+    EXPORT_SSH_PORT = int(_loaded.get("ssh_port", 22))
+    EXPORT_SSH_IDENTITY_FILE = _loaded.get("ssh_identity_file")
+
+    EXPORT_REMOTE_BASE_DIR = _loaded.get("remote_base_dir")
+    EXPORT_PATTERNS = _loaded.get("export_patterns", [])
+    EXPORT_LOCAL_DEST_DIR = _loaded.get("local_dest_dir")
+

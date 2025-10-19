@@ -5,6 +5,7 @@ logs/
 .env
 __pycache__/
 outputs/
+output/
 secrets.txt
 project_structure.txt
 *.egg-info/
