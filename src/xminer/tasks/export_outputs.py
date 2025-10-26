@@ -1,5 +1,7 @@
 from __future__ import annotations
-import argparse, os, shlex, shutil, subprocess, sys, stat
+import argparse, os, shlex, shutil, subprocess, sys
+import shlex
+import subprocess
 from pathlib import Path
 from ..config.params import Params  # <-- use the class (case matters!)
 
@@ -19,40 +21,49 @@ def _remote_has_rsync(ssh) -> bool:
 
 def _list_remote_matches(ssh, remote_base: str, patterns: list[str]) -> list[str]:
     """
-    Returns RELATIVE paths (to remote_base) matching patterns.
-    Robust to noisy login/startup output from the remote shell.
+    Each entry in `patterns` is a DIRECTORY relative to `remote_base`.
+    For each directory, include all *.csv files directly inside it (non-recursive).
+    Returns RELATIVE paths to `remote_base`.
     """
+
+    # Normalize the list: drop empties, strip trailing slashes
+    dirs = [p.rstrip("/").strip() for p in (patterns or []) if p and p.strip()]
+    if not dirs:
+        return []
+
     user_host, ssh_opts = _build_ssh(ssh["user"], ssh["host"], ssh["port"], ssh.get("identity_file"))
 
-    # Quote each pattern for the *remote* shell
-    glob_parts = " ".join(shlex.quote(p) for p in patterns)
+    # Remote script reads directories from "$@" (so spaces in names are safe)
+    remote_script = f"""set -e
+cd {shlex.quote(remote_base)}
+printf '__XM_START__\\0'
+for d in "$@"; do
+  if [ -d "$d" ]; then
+    # non-recursive CSVs directly in the directory
+    find -L "$d" -mindepth 1 -maxdepth 1 -type f -name '*.csv' -print0
+  else
+    :  # silently skip missing/non-dir entries
+  fi
+done
+printf '__XM_END__\\0'
+"""
 
-    # Use non-login bash (-c, NOT -lc), and fence output between markers.
-    remote_cmd = (
-        f"set -e; "
-        f"shopt -s globstar nullglob dotglob 2>/dev/null || true; "
-        f"cd {shlex.quote(remote_base)}; "
-        f"printf '__XM_START__\\0'; "
-        f"printf '%s\\0' {glob_parts}; "
-        f"printf '__XM_END__\\0'"
-    )
+    # Feed the script on stdin; pass each directory as a separate argv
+    argv = ["ssh", *ssh_opts, user_host, "bash", "-s", "--", *dirs]
+    raw = subprocess.check_output(argv, input=remote_script.encode("utf-8"))
+    tokens = raw.decode("utf-8", "ignore").split("\0")
 
-    argv = ["ssh", *ssh_opts, user_host, "bash", "-c", remote_cmd]
-    out = subprocess.check_output(argv)
-
-    tokens = out.decode("utf-8", "ignore").split("\0")
-    # Keep only the slice strictly between the sentinels
-    rels = []
+    # Extract only the slice between sentinels
     try:
         i = tokens.index("__XM_START__")
         j = tokens.index("__XM_END__", i + 1)
-        rels = [t for t in tokens[i+1:j] if t]  # skip empties
+        rels = [t for t in tokens[i+1:j] if t]
     except ValueError:
-        # No sentinels? fallback to previous behavior (still NUL-safe if lucky),
-        # but also filter out lines that look like shell noise.
-        rels = [t for t in tokens if t and ("\n" not in t) and (" " not in t)]
+        rels = []
 
     return rels
+
+
 
 def _scp_opts_from_ssh(ssh_opts: list[str]) -> list[str]:
     out = []
