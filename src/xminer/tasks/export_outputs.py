@@ -1,36 +1,115 @@
 from __future__ import annotations
-import argparse, os, shlex, shutil, subprocess, sys
+import argparse, os, shlex, shutil, subprocess, sys, stat
 from pathlib import Path
 from ..config.params import Params  # <-- use the class (case matters!)
 
 def _have(cmd: str) -> bool: return shutil.which(cmd) is not None
 def _expand(p: str | None) -> str | None: return os.path.expanduser(p) if p else p
 
+def _remote_has_rsync(ssh) -> bool:
+    user_host, ssh_opts = _build_ssh(ssh["user"], ssh["host"], ssh["port"], ssh.get("identity_file"))
+    argv = ["ssh", *ssh_opts, user_host, "bash", "-c",
+            "command -v rsync >/dev/null && echo YES || echo NO"]
+    try:
+        out = subprocess.check_output(argv).decode().strip()
+        return out == "YES"
+    except subprocess.CalledProcessError:
+        return False
+
+
+def _list_remote_matches(ssh, remote_base: str, patterns: list[str]) -> list[str]:
+    """
+    Returns RELATIVE paths (to remote_base) matching patterns.
+    Robust to noisy login/startup output from the remote shell.
+    """
+    user_host, ssh_opts = _build_ssh(ssh["user"], ssh["host"], ssh["port"], ssh.get("identity_file"))
+
+    # Quote each pattern for the *remote* shell
+    glob_parts = " ".join(shlex.quote(p) for p in patterns)
+
+    # Use non-login bash (-c, NOT -lc), and fence output between markers.
+    remote_cmd = (
+        f"set -e; "
+        f"shopt -s globstar nullglob dotglob 2>/dev/null || true; "
+        f"cd {shlex.quote(remote_base)}; "
+        f"printf '__XM_START__\\0'; "
+        f"printf '%s\\0' {glob_parts}; "
+        f"printf '__XM_END__\\0'"
+    )
+
+    argv = ["ssh", *ssh_opts, user_host, "bash", "-c", remote_cmd]
+    out = subprocess.check_output(argv)
+
+    tokens = out.decode("utf-8", "ignore").split("\0")
+    # Keep only the slice strictly between the sentinels
+    rels = []
+    try:
+        i = tokens.index("__XM_START__")
+        j = tokens.index("__XM_END__", i + 1)
+        rels = [t for t in tokens[i+1:j] if t]  # skip empties
+    except ValueError:
+        # No sentinels? fallback to previous behavior (still NUL-safe if lucky),
+        # but also filter out lines that look like shell noise.
+        rels = [t for t in tokens if t and ("\n" not in t) and (" " not in t)]
+
+    return rels
+
+def _scp_opts_from_ssh(ssh_opts: list[str]) -> list[str]:
+    out = []
+    it = iter(ssh_opts)
+    for opt in it:
+        if opt == "-p":                 # ssh port
+            out.extend(["-P", next(it)])  # scp port
+        else:
+            out.append(opt)
+    return out
+
 def _build_ssh(user: str, host: str, port: int, identity_file: str | None):
     user_host = f"{user}@{host}"
-    ssh_opts = [f"-p {int(port)}"]
-    if identity_file: ssh_opts.append(f"-i {shlex.quote(_expand(identity_file))}")
-    ssh_opts.append("-o StrictHostKeyChecking=accept-new")
-    return user_host, " ".join(ssh_opts)
+    ssh_opts = ["-p", str(int(port)), "-o", "StrictHostKeyChecking=accept-new"]
+    if identity_file:
+        ssh_opts += ["-i", _expand(identity_file)]
+    return user_host, ssh_opts
+
 
 def _rsync_copy(ssh, remote_base, patterns, local_dest: Path, dry_run: bool):
     user_host, ssh_opts = _build_ssh(ssh["user"], ssh["host"], ssh["port"], ssh.get("identity_file"))
-    src = f"{user_host}:{shlex.quote(remote_base.rstrip('/'))}/"
-    cmd = ["rsync", "-av", "-e", f"ssh {ssh_opts}", *[f"--include={p}" for p in patterns], "--exclude=*",
-           src, str(local_dest)]
-    if dry_run: cmd.insert(1, "--dry-run")
-    print("Running:", " ".join(shlex.quote(c) for c in cmd))
-    subprocess.check_call(cmd)
+    rels = _list_remote_matches(ssh, remote_base, patterns)
+    if not rels:
+        print("No remote files matched patterns; nothing to copy.")
+        return
+
+    e_arg = " ".join(["ssh", *ssh_opts])  # <- was f"ssh {ssh_opts}"
+    for rel in rels:
+        src = f"{user_host}:{shlex.quote(remote_base.rstrip('/'))}/./{rel}"
+        cmd = ["rsync", "-avR", "-e", e_arg, src, str(local_dest)]
+        if dry_run:
+            cmd.insert(1, "--dry-run")
+        print("Running:", " ".join(shlex.quote(c) for c in cmd))
+        subprocess.check_call(cmd)
+
 
 def _scp_copy(ssh, remote_base, patterns, local_dest: Path, dry_run: bool):
-    user_host, _ = _build_ssh(ssh["user"], ssh["host"], ssh["port"], ssh.get("identity_file"))
-    for p in patterns:
-        remote = f"{user_host}:{shlex.quote(remote_base.rstrip('/'))}/{p}"
-        cmd = ["scp", "-r", "-P", str(ssh["port"])]
-        if ssh.get("identity_file"): cmd += ["-i", _expand(ssh["identity_file"])]
-        cmd += ["-o", "StrictHostKeyChecking=accept-new", remote, str(local_dest)]
-        print(("[dry-run] Would run:" if dry_run else "Running:"), " ".join(shlex.quote(c) for c in cmd))
-        if not dry_run: subprocess.check_call(cmd)
+    user_host, ssh_opts = _build_ssh(ssh["user"], ssh["host"], ssh["port"], ssh.get("identity_file"))
+    rels = _list_remote_matches(ssh, remote_base, patterns)
+    if not rels:
+        print("No remote files matched patterns; nothing to copy.")
+        return
+
+    scp_opts = _scp_opts_from_ssh(ssh_opts)
+
+    for rel in rels:
+        local_path = local_dest / rel
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+
+        src = f"{user_host}:{shlex.quote(remote_base.rstrip('/'))}/{rel}"
+        argv = ["scp", *scp_opts, src, str(local_path)]
+
+        if dry_run:
+            print("[dry-run] Would run:", " ".join(shlex.quote(a) for a in argv))
+        else:
+            print("Running:", " ".join(shlex.quote(a) for a in argv))
+            subprocess.check_call(argv)
 
 def main(argv=None) -> int:
     P = Params()  # load parameters.yml via your production class
@@ -60,11 +139,16 @@ def main(argv=None) -> int:
         return 1
 
     local_dest.mkdir(parents=True, exist_ok=True)
+    local_rsync = _have("rsync")
+    remote_rsync = _remote_has_rsync(ssh) if local_rsync else False
     try:
-        if _have("rsync"):
+        if local_rsync and remote_rsync:
             _rsync_copy(ssh, remote_base, patterns, local_dest, args.dry_run)
         else:
-            print("rsync not found, using scp fallback...", file=sys.stderr)
+            if local_rsync and not remote_rsync:
+                print("Remote rsync not available; using scp with path preservation...", file=sys.stderr)
+            elif not local_rsync:
+                print("Local rsync not found; using scp with path preservation...", file=sys.stderr)
             _scp_copy(ssh, remote_base, patterns, local_dest, args.dry_run)
     except subprocess.CalledProcessError as e:
         print(f"Transfer failed (exit {e.returncode})", file=sys.stderr)

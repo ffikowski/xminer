@@ -35,10 +35,10 @@ rate_limit_fallback_sleep: 901
 trends_woeid: 23424829
 trends_place_name: "Germany"
 # existing parameters...
-ssh_host: srv680475
+ssh_host: 145.223.101.94
 ssh_user: app
 ssh_port: 22
-ssh_identity_file: "~/.ssh/id_rsa"
+ssh_identity_file: "C:/Users/felix/.ssh/id_ed25519"
 
 remote_base_dir: "/home/app/apps/xminer/output"
 export_patterns:
