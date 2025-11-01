@@ -5,7 +5,7 @@ load_to_db: true
 store_csv: false
 tweets_sample_limit: -1    # -1 => all, or set e.g. 200
 sample_seed: 42
-tweets_since: "2025-08-01"
+tweets_since: "2025-09-01"
 id_cols:
   - author_id
   - in_reply_to_user_id
@@ -18,7 +18,7 @@ count_cols:
   - impression_count
 skip_fetch_date: "2025-09-28"
 year: 2025
-month: 9
+month: 10
 outdir: output
 top_n: 10
 tweet_fields:
@@ -42,7 +42,7 @@ ssh_identity_file: "C:/Users/felix/.ssh/id_ed25519"
 
 remote_base_dir: "/home/app/apps/xminer/output"
 export_patterns:
-  - "202509/profiles"
-  # - "202509/tweets"
+  - "202510/profiles"
+  - "202510/tweets"
   # - "202509/trends"
 local_dest_dir: "C:/Users/felix/Documents/xminer/outputs"
