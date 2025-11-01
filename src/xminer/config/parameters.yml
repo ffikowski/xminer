@@ -43,6 +43,6 @@ ssh_identity_file: "C:/Users/felix/.ssh/id_ed25519"
 remote_base_dir: "/home/app/apps/xminer/output"
 export_patterns:
   - "202509/profiles"
-  - "202509/tweets"
-  - "202509/trends"
+  # - "202509/tweets"
+  # - "202509/trends"
 local_dest_dir: "C:/Users/felix/Documents/xminer/outputs"
