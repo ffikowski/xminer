@@ -123,7 +123,6 @@ python -m xminer.pipelines.cli run all       # Full end-to-end workflow
 - Configuration-first: All behavior controlled via parameters.yml.  
 - Safe testing: `--offline` and `--dry-run` prevent any API or DB side effects.
 
-```
 
 ---
 
