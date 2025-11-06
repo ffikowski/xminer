@@ -102,7 +102,7 @@ The CLI is powered by Typer:
 python -m xminer.pipelines.cli run fetch     # Fetch profiles + tweets
 python -m xminer.pipelines.cli run metrics   # Compute all metrics
 python -m xminer.pipelines.cli run all       # Full end-to-end workflow
-
+```
 ---
 
 ## Core Workflows
