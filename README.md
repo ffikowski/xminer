@@ -1,11 +1,11 @@
-# 🧠 Xminer – Automated Social Metrics for Political Twitter/X Accounts
+# Xminer – Automated Social Metrics for Political Twitter/X Accounts
 
 Xminer is a Python-based analytics framework that automates the collection and analysis of political activity on **X (Twitter)**.  
 It fetches data via the X API, stores it in a Neon-hosted PostgreSQL database, and computes a rich set of monthly and delta (MoM) metrics for accounts, parties, and tweets.
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 xminer/
@@ -22,7 +22,7 @@ xminer/
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 ### 1. Environment variables (.env)
 Secrets and connection strings:
@@ -75,7 +75,7 @@ Parameters can be grouped or flat; the loader automatically resolves both styles
 
 ---
 
-## 🚀 Running Xminer
+## Running Xminer
 
 ### Activate virtual environment
 ```
@@ -105,7 +105,7 @@ python -m xminer.pipelines.cli run all       # Full end-to-end workflow
 
 ---
 
-## 🧩 Core Workflows
+## Core Workflows
 
 | Stage | Scripts | Description |
 |--------|----------|-------------|
@@ -116,7 +116,7 @@ python -m xminer.pipelines.cli run all       # Full end-to-end workflow
 
 ---
 
-## 🧠 Design Philosophy
+## Design Philosophy
 
 - Composable tasks: Each script runs standalone.  
 - Pipeline orchestration: Defined in pipelines/flows.py and executed via CLI.  
@@ -127,7 +127,7 @@ python -m xminer.pipelines.cli run all       # Full end-to-end workflow
 
 ---
 
-## 🖥️ Output Structure
+## Output Structure
 
 ```
 output/
