@@ -21,12 +21,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-TWEET_FIELDS = [
-    "created_at","lang","public_metrics","conversation_id","in_reply_to_user_id",
-    "possibly_sensitive","source","entities","referenced_tweets",
-]
-DEFAULT_RATE_LIMIT_SLEEP = 901
-
 def _start_time():
     val = getattr(Params, "tweets_since", None)
     if not val:

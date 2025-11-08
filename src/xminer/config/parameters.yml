@@ -1,48 +1,66 @@
-file: fetch_x_profiles.log
-sample_limit: -1
-chunk_size: 100
-load_to_db: true
-store_csv: false
-tweets_sample_limit: -1    # -1 => all, or set e.g. 200
-sample_seed: 42
-tweets_since: "2025-09-01"
-id_cols:
-  - author_id
-  - in_reply_to_user_id
-count_cols:
-  - like_count
-  - reply_count
-  - retweet_count
-  - quote_count
-  - bookmark_count
-  - impression_count
-skip_fetch_date: "2025-09-28"
-year: 2025
-month: 10
-outdir: output
-top_n: 10
-tweet_fields:
-  - created_at
-  - lang
-  - public_metrics
-  - conversation_id
-  - in_reply_to_user_id
-  - possibly_sensitive
-  - source
-  - entities
-  - referenced_tweets
-rate_limit_fallback_sleep: 901
-trends_woeid: 23424829
-trends_place_name: "Germany"
-# existing parameters...
-ssh_host: 145.223.101.94
-ssh_user: app
-ssh_port: 22
-ssh_identity_file: "C:/Users/felix/.ssh/id_ed25519"
+common:
+  logging:
+    file: fetch_x_profiles.log
+    level: INFO
 
-remote_base_dir: "/home/app/apps/xminer/output"
-export_patterns:
-  - "202510/profiles"
-  - "202510/tweets"
-  # - "202509/trends"
-local_dest_dir: "C:/Users/felix/Documents/xminer/outputs"
+  # Shared period + output defaults used by metrics tasks
+  year: 2025
+  month: 9
+  outdir: output
+  top_n: 50
+
+fetch_x_profiles:
+  sample_limit: -1         # -1 = all
+  chunk_size: 100
+  load_to_db: true
+  store_csv: false
+
+fetch_tweets:
+  # sampling / window
+  tweets_sample_limit: -1  # -1 = all
+  sample_seed: 42
+  tweets_since: "2025-08-01"
+
+  # schema helpers used by metrics
+  id_cols:
+    - author_id
+    - in_reply_to_user_id
+  count_cols:
+    - like_count
+    - reply_count
+    - retweet_count
+    - quote_count
+    - bookmark_count
+    - impression_count
+
+  # API fields + rate limiting
+  tweet_fields:
+    - created_at
+    - lang
+    - public_metrics
+    - conversation_id
+    - in_reply_to_user_id
+    - possibly_sensitive
+    - source
+    - entities
+    - referenced_tweets
+  rate_limit_fallback_sleep: 901
+
+  # optional guard; leave null or remove if unused
+  skip_fetch_date: null    # e.g. "2025-09-12T00:00:00Z"
+
+fetch_x_trends:
+  trends_woeid: 23424829
+  trends_place_name: "Germany"
+
+export_outputs:
+  ssh_host: 145.223.101.94
+  ssh_user: app
+  ssh_port: 22
+  ssh_identity_file: "C:/Users/felix/.ssh/id_ed25519"
+
+  remote_base_dir: "/home/app/apps/xminer/output"
+  export_patterns:
+    - "202509/tweets/tweets_individual_month_202509.csv"
+    - "202509/profiles/*.csv"
+  local_dest_dir: "C:/Users/felix/Documents/xminer/outputs"

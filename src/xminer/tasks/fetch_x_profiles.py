@@ -22,9 +22,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ---------- Main logic ----------
-
-import re
-
 def _politicians_table_name(month: int, year: int) -> str:
     # Coerce and zero-pad month, e.g. 8 -> "08"
     mm = f"{int(month):02d}"

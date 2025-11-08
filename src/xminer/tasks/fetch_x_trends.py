@@ -1,10 +1,9 @@
 # src/xminer/tasks/fetch_x_trends.py
 import os, logging
 from datetime import datetime, timezone
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 import requests
-import pandas as pd
 from sqlalchemy import text
 
 from ..config.params import Params                 # keep consistency with other tasks

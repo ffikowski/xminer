@@ -8,6 +8,7 @@ from ..tasks import (
     x_profile_metrics_monthly as T_prof_month,
     x_profile_metrics_delta as T_prof_delta,
     tweets_metrics_monthly as T_tweets_month,
+    tweets_metrics_delta as T_tweets_delta,
 )
 from .runner import Pipeline, Step
 
@@ -44,7 +45,10 @@ def pipeline_metrics() -> Pipeline:
              T_tweets_month.run,
              dict(year=year, month=month, outdir=outdir,
                   schema=schema, tweets_tbl="tweets", x_profiles_tbl="x_profiles", top_n=top_n)),
-        # Optional: add tweets_metrics_delta here once implemented
+        Step("tweets_metrics_delta",
+             T_tweets_delta.run,
+             dict(year=year, month=month, outdir=outdir,
+                  schema=schema, tweets_tbl="tweets", x_profiles_tbl="x_profiles")),
     ]
     return Pipeline("metrics", steps)
 

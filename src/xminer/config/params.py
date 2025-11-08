@@ -1,69 +1,102 @@
-# src/xminer/params.py
+# src/xminer/config/params.py
 import os, yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
 def _load_yaml(path: str) -> dict:
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
-
-# choose parameters file; allow ENV-specific override
-_loaded = {}
 
 HERE = Path(__file__).resolve().parent
 PARAMS_FILE = HERE / "parameters.yml"
+if not PARAMS_FILE.exists():
+    raise RuntimeError("No parameters file found. Looked for: parameters.yml")
 
-if os.path.exists(PARAMS_FILE):
-    _loaded = _load_yaml(PARAMS_FILE)
-if not _loaded:
-    raise RuntimeError(f"No parameters file found. Looked for: parameters.yml")
+_loaded = _load_yaml(PARAMS_FILE)
+
+def _dig(d: dict, dotted: str):
+    """Traverse dict by dotted path; return (found, value)."""
+    cur = d
+    for part in dotted.split("."):
+        if not isinstance(cur, dict) or part not in cur:
+            return False, None
+        cur = cur[part]
+    return True, cur
+
+def _get(*candidates, default=None):
+    """
+    Return the first existing key among dotted-path candidates.
+    Examples: _get('fetch_tweets.tweets_since','tweets_since', default=None)
+    """
+    for key in candidates:
+        ok, val = _dig(_loaded, key)
+        if ok:
+            return val
+    return default
+
+def _get_int(*candidates, default=0):
+    v = _get(*candidates, default=default)
+    try:
+        return int(v) if v is not None else default
+    except Exception:
+        return default
+
+def _get_bool(*candidates, default=False):
+    v = _get(*candidates, default=default)
+    return bool(v)
+
+def _get_list(*candidates, default=None):
+    v = _get(*candidates, default=default if default is not None else [])
+    return list(v) if isinstance(v, (list, tuple)) else (default or [])
+
+def _get_dt_utc(*candidates, default=None):
+    s = _get(*candidates, default=None)
+    if not s:
+        return default
+    try:
+        # Allow 'Z' suffix
+        s = str(s).replace("Z", "+00:00")
+        return datetime.fromisoformat(s).replace(tzinfo=timezone.utc) if "Z" in s or "+" in s else datetime.fromisoformat(s)
+    except Exception:
+        return default
 
 class Params:
-    logging_file = _loaded.get("file", "app.log")
-    logging_level = _loaded.get("level", "INFO")
-    sample_limit = int(_loaded.get("sample_limit", 50))
-    chunk_size = int(_loaded.get("chunk_size", 100))
-    load_to_db = bool(_loaded.get("load_to_db", False))
-    store_csv    = bool(_loaded.get("store_csv", False))
-    # NEW:
-    tweets_sample_limit = int(_loaded.get("tweets_sample_limit", _loaded.get("sample_limit", -1)))
-    sample_seed = _loaded.get("sample_seed", None)
-    tweets_since = _loaded.get("tweets_since", None)
+    # ----- logging -----
+    logging_file  = _get("common.logging.file", "file", default="app.log")
+    logging_level = _get("common.logging.level", "level", default="INFO")
 
-    id_cols = _loaded.get("id_cols", [
-        "tweet_id","author_id","conversation_id","in_reply_to_user_id"
-    ])
+    # ----- common date/output -----
+    year   = _get_int("common.year", "year", default=2025)
+    month  = _get_int("common.month", "month", default=9)
+    outdir = _get("common.outdir", "outdir", default="output")
+    top_n  = _get_int("common.top_n", "top_n", default=10)
 
-    count_cols = _loaded.get("count_cols", [
-        "like_count","reply_count","retweet_count",
-        "quote_count","bookmark_count","impression_count"
-    ])
+    # ----- fetch_x_profiles -----
+    sample_limit = _get_int("fetch_x_profiles.sample_limit", "sample_limit", default=50)
+    chunk_size   = _get_int("fetch_x_profiles.chunk_size", "chunk_size", default=100)
+    load_to_db   = _get_bool("fetch_x_profiles.load_to_db", "load_to_db", default=False)
+    store_csv    = _get_bool("fetch_x_profiles.store_csv", "store_csv", default=False)
 
-    tweet_fields = _loaded.get("tweet_fields", [
-        "created_at","lang","public_metrics","conversation_id","in_reply_to_user_id",
-        "possibly_sensitive","source","entities","referenced_tweets",
-    ])
-    rate_limit_fallback_sleep = int(_loaded.get("rate_limit_fallback_sleep", 901))
+    # ----- fetch_tweets -----
+    tweets_sample_limit = _get_int("fetch_tweets.tweets_sample_limit", "tweets_sample_limit", "sample_limit", default=-1)
+    sample_seed         = _get("fetch_tweets.sample_seed", "sample_seed", default=None)
+    tweets_since        = _get("fetch_tweets.tweets_since", "tweets_since", default=None)
+    tweet_fields        = _get_list("fetch_tweets.tweet_fields", "tweet_fields",
+                                    default=["created_at","lang","public_metrics","conversation_id",
+                                             "in_reply_to_user_id","possibly_sensitive","source",
+                                             "entities","referenced_tweets"])
+    rate_limit_fallback_sleep = _get_int("fetch_tweets.rate_limit_fallback_sleep", "rate_limit_fallback_sleep", default=901)
+    skip_fetch_date     = _get_dt_utc("fetch_tweets.skip_fetch_date", "skip_fetch_date", default=None)
 
-    skip_fetch_date = datetime.fromisoformat(_loaded.get("skip_fetch_date")).replace(tzinfo=timezone.utc)
+    # ----- trends -----
+    trends_woeid      = _get_int("fetch_x_trends.trends_woeid", "trends_woeid", default=23424829)
+    trends_place_name = _get("fetch_x_trends.trends_place_name", "trends_place_name", default="Germany")
 
-    # New metrics parameters (top-level keys in parameters.yml)
-    year   = int(_loaded.get("year", 2025))
-    month  = int(_loaded.get("month", 9))
-    outdir = _loaded.get("outdir", "output")
-    top_n  = int(_loaded.get("top_n", 10))
-
-    # X Trends params
-    trends_woeid = int(_loaded.get("trends_woeid", 23424829))
-    trends_place_name = _loaded.get("trends_place_name", "Germany")
-
-    # --- export settings ---
-    EXPORT_SSH_HOST = _loaded.get("ssh_host")
-    EXPORT_SSH_USER = _loaded.get("ssh_user")
-    EXPORT_SSH_PORT = int(_loaded.get("ssh_port", 22))
-    EXPORT_SSH_IDENTITY_FILE = _loaded.get("ssh_identity_file")
-
-    EXPORT_REMOTE_BASE_DIR = _loaded.get("remote_base_dir")
-    EXPORT_PATTERNS = _loaded.get("export_patterns", [])
-    EXPORT_LOCAL_DEST_DIR = _loaded.get("local_dest_dir")
-
+    # ----- export outputs -----
+    EXPORT_SSH_HOST          = _get("export_outputs.ssh_host", "ssh_host", default=None)
+    EXPORT_SSH_USER          = _get("export_outputs.ssh_user", "ssh_user", default=None)
+    EXPORT_SSH_PORT          = _get_int("export_outputs.ssh_port", "ssh_port", default=22)
+    EXPORT_SSH_IDENTITY_FILE = _get("export_outputs.ssh_identity_file", "ssh_identity_file", default=None)
+    EXPORT_REMOTE_BASE_DIR   = _get("export_outputs.remote_base_dir", "remote_base_dir", default=None)
+    EXPORT_PATTERNS          = _get_list("export_outputs.export_patterns", "export_patterns", default=[])
+    EXPORT_LOCAL_DEST_DIR    = _get("export_outputs.local_dest_dir", "local_dest_dir", default=None)
