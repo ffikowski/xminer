@@ -100,3 +100,4 @@ class Params:
     EXPORT_REMOTE_BASE_DIR   = _get("export_outputs.remote_base_dir", "remote_base_dir", default=None)
     EXPORT_PATTERNS          = _get_list("export_outputs.export_patterns", "export_patterns", default=[])
     EXPORT_LOCAL_DEST_DIR    = _get("export_outputs.local_dest_dir", "local_dest_dir", default=None)
+    EXPORT_GRAPHICS_BASE_DIR = _get("export_outputs.graphics_base_dir", "graphics_base_dir", default=None)
