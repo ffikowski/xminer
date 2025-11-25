@@ -299,12 +299,13 @@ def run(year: int, month: int, outdir: str, schema: str, tweets_tbl: str, x_prof
     # load
     prof_latest = load_latest_profiles(schema=schema, x_profiles=x_profiles_tbl, month=month, year=year)
     tweets_month = load_tweets_month(schema=schema, tweets=tweets_tbl, month=month, year=year, start_ts=start_ts, end_ts=end_ts)
-
+    logger.info("Partei_kurz values in latest profiles: %s", prof_latest["partei_kurz"].dropna().unique())
     if tweets_month.empty:
         logger.warning("No tweets found for %04d-%02d. Outputs will be empty.", year, month)
 
     # enrich tweets with latest followers etc. for follower-normalized metrics
     dataset = enrich_with_profiles(tweets_month, prof_latest)
+    logger.info("Partei_kurz values in dataset: %s", dataset["partei_kurz"].dropna().unique())
 
     # compute & write
     for spec in build_metrics(top_n=top_n):

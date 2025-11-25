@@ -213,6 +213,7 @@ def enrich_with_profiles(tweets_df: pd.DataFrame, prof_df: pd.DataFrame) -> pd.D
     use_cols = [c for c in ["username", "name", "followers_count", "following_count", "tweet_count", "listed_count", "verified", "protected"] if c in prof_df.columns]
     prof_small = prof_df[use_cols].drop_duplicates("username") if "username" in prof_df else prof_df
     out = tweets_df.merge(prof_small, on="username", how="left", suffixes=("", "_profile"))
+    
     # precompute per-tweet engagement components
     for c in ["like_count", "reply_count", "retweet_count", "quote_count", "bookmark_count", "impression_count"]:
         if c not in out:
