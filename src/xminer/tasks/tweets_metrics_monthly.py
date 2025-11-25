@@ -155,6 +155,7 @@ def load_tweets_month(schema: str, tweets: str, month: int, year: int, start_ts:
             df[c] = pd.to_numeric(df[c], errors="coerce")
     if "username" in df:
         df["username"] = df["username"].astype(str).str.strip()
+    df = normalize_party(df)
     return df
 
 
