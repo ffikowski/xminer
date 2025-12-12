@@ -28,6 +28,7 @@ def _list_remote_matches(ssh, remote_base: str, patterns: list[str]) -> list[str
 
     # Normalize the list: drop empties, strip trailing slashes
     dirs = [p.rstrip("/").strip() for p in (patterns or []) if p and p.strip()]
+    print(dirs)
     if not dirs:
         return []
 
