@@ -6,5 +6,6 @@ __pycache__/
 outputs/
 output/
 secrets.txt
+Textdokument (neu).txt
 project_structure.txt
 *.egg-info/
