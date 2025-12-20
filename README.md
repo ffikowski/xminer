@@ -1,4 +1,4 @@
-# Xminer – Automated Social Metrics for Political Twitter/X Accounts
+# Xminer �?" Automated Social Metrics for Political Twitter/X Accounts
 
 Xminer is a Python-based analytics framework that automates the collection and analysis of political activity on **X (Twitter)**.  
 It fetches data via the X API, stores it in a Neon-hosted PostgreSQL database, and computes a rich set of monthly and delta (MoM) metrics for accounts, parties, and tweets.
@@ -9,15 +9,14 @@ It fetches data via the X API, stores it in a Neon-hosted PostgreSQL database, a
 
 ```
 xminer/
-├── src/xminer/
-│   ├── config/          # Configuration system and parameter loader
-│   ├── io/              # Input/output connectors
-│   ├── utils/           # Shared helpers and metric computations
-│   ├── tasks/           # Executable scripts for fetching & metrics
-│   └── pipelines/       # Pipeline orchestration (fetch, metrics, all)
-├── requirements.txt
-├── pyproject.toml
-└── README.md
+  src/xminer/
+    config/          # Configuration system and parameter loader
+    io/              # Input/output connectors
+    utils/           # Shared helpers and metric computations
+    tasks/           # Executable scripts for fetching & metrics
+    pipelines/       # Pipeline orchestration (fetch, metrics, all)
+  pyproject.toml
+  README.md
 ```
 
 ---
@@ -86,7 +85,9 @@ source .venv/bin/activate       # Linux/macOS
 
 ### Install dependencies
 ```
-pip install -r requirements.txt
+pip install .
+# or, for editable installs during development:
+pip install -e .
 ```
 
 ### Run single tasks
@@ -116,34 +117,7 @@ python -m xminer.pipelines.cli run all       # Full end-to-end workflow
 
 ---
 
-## Design Philosophy
-
-- Composable tasks: Each script runs standalone.  
-- Pipeline orchestration: Defined in pipelines/flows.py and executed via CLI.  
-- Configuration-first: All behavior controlled via parameters.yml.  
-- Safe testing: `--offline` and `--dry-run` prevent any API or DB side effects.
-
-
----
-
-## Output Structure
-
-```
-output/
-└── 202510/
-    ├── profiles/
-    │   ├── individual_base_202510.csv
-    │   ├── party_summary_202510.csv
-    │   └── top_accounts_global_202510.csv
-    └── tweets/
-        ├── tweets_top_by_engagement_rate_202510.csv
-        ├── tweets_delta_party_202510.csv
-        └── tweets_top_gainers_engagement_202510.csv
-```
-
----
-
-## 🧑‍💻 Development Notes
+## �Y�'�??�Y'� Development Notes
 
 - SQLAlchemy engine handles Neon DB connections.  
 - .env holds secrets; parameters.yml holds runtime configuration.  

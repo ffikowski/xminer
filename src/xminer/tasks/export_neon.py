@@ -1,116 +1,191 @@
-"""
-Export data from Neon (Postgres) to local files.
-
-Usage examples:
-  python -m xminer.export_neon --table public.x_profiles --out exports/x_profiles.csv
-  python -m xminer.export_neon --query "SELECT * FROM public.x_profiles WHERE verified" --out exports/verified.csv.gz
-  python -m xminer.export_neon --table public.x_profiles --out exports/x_profiles.parquet
-"""
+from __future__ import annotations
 
 import argparse
-import os
-import sys
-import gzip
 import csv
-from typing import Optional
+import os
+from typing import Iterable, Tuple
 
 import pandas as pd
-from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
+from sqlalchemy import text
 
-# Load .env file if present (so DATABASE_URL is available)
-load_dotenv()
+from ..config.params import Params
+from ..io.db import engine
+from ..utils.global_helpers import build_outdir, month_bounds
 
-# Try to reuse xminer.db.engine if available
-try:
-    from ..io.db import engine as default_engine
-except Exception:
-    default_engine = None
+DEFAULT_SCHEMA = "public"
+TRENDS_TABLE = "x_trends"
+TWEETS_TABLE = "tweets"
+TREND_COLUMNS = [
+    "woeid",
+    "place_name",
+    "trend_name",
+    "tweet_count",
+    "rank",
+    "retrieved_at",
+    "source_version",
+]
+TWEET_COLUMNS = [
+    "tweet_id",
+    "author_id",
+    "username",
+    "created_at",
+    "text",
+    "lang",
+    "conversation_id",
+    "in_reply_to_user_id",
+    "possibly_sensitive",
+    "like_count",
+    "reply_count",
+    "retweet_count",
+    "quote_count",
+    "bookmark_count",
+    "impression_count",
+    "source",
+    "entities",
+    "referenced_tweets",
+    "retrieved_at",
+]
 
 
-def get_engine(dsn: Optional[str]):
-    """Return a SQLAlchemy engine, preferring explicit DSN > DATABASE_URL > default engine."""
-    if dsn:
-        return create_engine(dsn)
-    env_dsn = os.getenv("DATABASE_URL")
-    if env_dsn:
-        return create_engine(env_dsn)
-    if default_engine is not None:
-        return default_engine
-    sys.exit(
-        "❌ No database connection found.\n"
-        "Provide --dsn postgresql://USER:PASS@HOST/DB?sslmode=require\n"
-        "or set DATABASE_URL in .env, or configure xminer.db.engine."
-    )
+def month_window(year: int, month: int) -> Tuple[pd.Timestamp, pd.Timestamp]:
+    """Return lower bound and exclusive upper bound for the configured month."""
+    return month_bounds(year, month)
 
 
-def build_sql(args) -> str:
-    if args.query:
-        return args.query
-    if not args.table:
-        sys.exit("Provide --table or --query.")
-    sql = f"SELECT * FROM {args.table}"
-    if args.where:
-        sql += f" WHERE {args.where}"
-    if args.limit is not None:
-        sql += f" LIMIT {int(args.limit)}"
-    return sql
+def default_trends_out_path(base_outdir: str, year: int, month: int) -> str:
+    ym = f"{year:04d}{month:02d}"
+    trends_dir = build_outdir(base_outdir, year, month, "trends")
+    return os.path.join(trends_dir, f"{TRENDS_TABLE}_{ym}.csv")
 
 
-def write_csv_iter(conn, sql: str, out_path: str, chunksize: int, header: bool, gzip_enabled: bool):
-    opener = gzip.open if gzip_enabled else open
-    mode = "wt" if gzip_enabled else "w"
+def default_tweets_out_path(base_outdir: str, year: int, month: int) -> str:
+    ym = f"{year:04d}{month:02d}"
+    tweets_dir = build_outdir(base_outdir, year, month, "tweets")
+    return os.path.join(tweets_dir, f"{TWEETS_TABLE}_{ym}.csv")
+
+
+def _stream_to_csv(sql, params: dict, out_path: str, columns: Iterable[str], chunksize: int) -> int:
+    total = 0
     first = True
-    with opener(out_path, mode, encoding="utf-8", newline="") as f:
-        for chunk in pd.read_sql(text(sql), conn, chunksize=chunksize):
-            chunk.to_csv(
-                f,
-                index=False,
-                header=(header and first),
-                quoting=csv.QUOTE_ALL  # 👈 ensures tweets with \n are wrapped in quotes
-            )
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with engine.connect() as conn, open(out_path, "w", encoding="utf-8", newline="") as fh:
+        for chunk in pd.read_sql(sql, conn, params=params, chunksize=chunksize):
+            total += len(chunk)
+            chunk.to_csv(fh, index=False, header=first, quoting=csv.QUOTE_ALL)
             first = False
 
-
-def write_parquet(conn, sql: str, out_path: str, chunksize: int):
-    frames = []
-    for chunk in pd.read_sql(text(sql), conn, chunksize=chunksize):
-        frames.append(chunk)
-    df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
-    df.to_parquet(out_path, index=False)
+        # If no rows matched, still write a header for downstream tools.
+        if total == 0 and first:
+            writer = csv.writer(fh, quoting=csv.QUOTE_ALL)
+            writer.writerow(columns)
+    return total
 
 
-def main():
-    ap = argparse.ArgumentParser(description="Export from Neon/Postgres to CSV or Parquet.")
-    ap.add_argument("--dsn", help="Optional: Postgres DSN (overrides DATABASE_URL and default engine).")
-    ap.add_argument("--table", help="Table to export, e.g. public.x_profiles")
-    ap.add_argument("--query", help="Custom SELECT; if set, overrides --table/--where/--limit")
-    ap.add_argument("--where", help="Optional WHERE clause, e.g. verified = true")
-    ap.add_argument("--limit", type=int, help="Optional LIMIT")
-    ap.add_argument("--out", required=True, help="Output file (.csv, .csv.gz, or .parquet)")
-    ap.add_argument("--chunksize", type=int, default=100_000, help="Rows per chunk (for streaming)")
-    ap.add_argument("--no-header", action="store_true", help="CSV only: omit header row")
-    args = ap.parse_args()
+def export_trends_month(
+    schema: str,
+    table: str,
+    start,
+    end,
+    out_path: str,
+    chunksize: int = 50_000,
+) -> int:
+    sql = text(
+        f"""
+        SELECT
+            woeid,
+            place_name,
+            trend_name,
+            tweet_count,
+            rank,
+            retrieved_at,
+            source_version
+        FROM {schema}.{table}
+        WHERE retrieved_at >= :start AND retrieved_at < :end
+        ORDER BY retrieved_at, rank
+        """
+    )
+    return _stream_to_csv(sql, {"start": start, "end": end}, out_path, TREND_COLUMNS, chunksize)
 
-    sql = build_sql(args)
-    out_dir = os.path.dirname(args.out) or "."
-    os.makedirs(out_dir, exist_ok=True)
 
-    engine = get_engine(args.dsn)
+def export_tweets_month(
+    schema: str,
+    table: str,
+    start,
+    end,
+    out_path: str,
+    chunksize: int = 50_000,
+) -> int:
+    sql = text(
+        f"""
+        SELECT
+            tweet_id,
+            author_id,
+            username,
+            created_at,
+            text,
+            lang,
+            conversation_id,
+            in_reply_to_user_id,
+            possibly_sensitive,
+            like_count,
+            reply_count,
+            retweet_count,
+            quote_count,
+            bookmark_count,
+            impression_count,
+            source,
+            entities,
+            referenced_tweets,
+            retrieved_at
+        FROM {schema}.{table}
+        WHERE created_at >= :start AND created_at < :end
+        ORDER BY created_at
+        """
+    )
+    return _stream_to_csv(sql, {"start": start, "end": end}, out_path, TWEET_COLUMNS, chunksize)
 
-    lower = args.out.lower()
-    is_parquet = lower.endswith(".parquet")
-    is_gzip = lower.endswith(".gz")
-    header = not args.no_header
 
-    with engine.connect() as conn:
-        if is_parquet:
-            write_parquet(conn, sql, args.out, args.chunksize)
-        else:
-            write_csv_iter(conn, sql, args.out, args.chunksize, header, gzip_enabled=is_gzip)
+def main(argv=None) -> int:
+    P = Params()
 
-    print(f"✅ Exported to {args.out}")
+    parser = argparse.ArgumentParser(description="Export monthly snapshots from Neon/Postgres.")
+    parser.add_argument("--schema", default=DEFAULT_SCHEMA, help="Schema for both tables.")
+    parser.add_argument("--trends-table", default=TRENDS_TABLE, help="Table name to export for trends.")
+    parser.add_argument("--tweets-table", default=TWEETS_TABLE, help="Table name to export for tweets.")
+    parser.add_argument("--chunksize", type=int, default=50_000, help="Rows per chunk when streaming from Postgres.")
+    parser.add_argument("--outdir", help="Override base output directory (default: outputs/...).")
+    parser.add_argument("--year", type=int, help="Optional override for year (defaults to parameters.yml).")
+    parser.add_argument("--month", type=int, help="Optional override for month (defaults to parameters.yml).")
+    parser.add_argument("--skip-trends", action="store_true", help="Only export tweets.")
+    parser.add_argument("--skip-tweets", action="store_true", help="Only export trends.")
+    args = parser.parse_args(argv)
+
+    year = args.year or getattr(P, "year", 2025)
+    month = args.month or getattr(P, "month", 1)
+    # Default to "outputs" per requested layout; allow explicit override.
+    base_outdir = args.outdir or getattr(P, "outdir", None) or "outputs"
+    if str(base_outdir).rstrip("/\\") == "output":
+        base_outdir = "outputs"
+
+    start, end = month_window(year, month)
+    totals = []
+    if not args.skip_trends:
+        out_trends = default_trends_out_path(base_outdir, year, month)
+        total_trends = export_trends_month(
+            args.schema, args.trends_table, start, end, out_trends, args.chunksize
+        )
+        totals.append(f"trends={total_trends} -> {out_trends}")
+
+    if not args.skip_tweets:
+        out_tweets = default_tweets_out_path(base_outdir, year, month)
+        total_tweets = export_tweets_month(
+            args.schema, args.tweets_table, start, end, out_tweets, args.chunksize
+        )
+        totals.append(f"tweets={total_tweets} -> {out_tweets}")
+
+    print("Export complete:", "; ".join(totals) if totals else "nothing to do")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
