@@ -5,7 +5,7 @@ common:
 
   # Shared period + output defaults used by metrics tasks
   year: 2025
-  month: 11
+  month: 12
   outdir: output
   top_n: 50
 
@@ -19,7 +19,7 @@ fetch_tweets:
   # sampling / window
   tweets_sample_limit: -1  # -1 = all
   sample_seed: 42
-  tweets_since: "2025-08-01"
+  tweets_since: "2025-10-01"
 
   # schema helpers used by metrics
   id_cols:
