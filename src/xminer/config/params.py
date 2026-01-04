@@ -92,6 +92,11 @@ class Params:
     trends_woeid      = _get_int("fetch_x_trends.trends_woeid", "trends_woeid", default=23424829)
     trends_place_name = _get("fetch_x_trends.trends_place_name", "trends_place_name", default="Germany")
 
+    # ----- bundestag votes -----
+    bundestag_votes_excel_dir = _get("fetch_bundestag_votes.excel_dir", "excel_dir", default="data/bundestag_votes")
+    bundestag_votes_load_to_db = _get_bool("fetch_bundestag_votes.load_to_db", default=True)
+    bundestag_votes_store_csv = _get_bool("fetch_bundestag_votes.store_csv", default=False)
+
     # ----- export outputs -----
     EXPORT_SSH_HOST          = _get("export_outputs.ssh_host", "ssh_host", default=None)
     EXPORT_SSH_USER          = _get("export_outputs.ssh_user", "ssh_user", default=None)

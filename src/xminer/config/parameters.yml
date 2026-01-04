@@ -53,6 +53,11 @@ fetch_x_trends:
   trends_woeid: 23424829
   trends_place_name: "Germany"
 
+fetch_bundestag_votes:
+  excel_dir: "data/bundestag_votes"  # Directory containing Excel vote files
+  load_to_db: true
+  store_csv: false
+
 export_outputs:
   ssh_host: 145.223.101.94
   ssh_user: app

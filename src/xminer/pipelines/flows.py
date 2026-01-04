@@ -5,6 +5,7 @@ from ..config.params import Params
 from ..tasks import (
     fetch_x_profiles as T_fetch_x_profiles,
     fetch_tweets as T_fetch_tweets,
+    fetch_bundestag_votes as T_bundestag_votes,
     x_profile_metrics_monthly as T_prof_month,
     x_profile_metrics_delta as T_prof_delta,
     tweets_metrics_monthly as T_tweets_month,
@@ -27,6 +28,7 @@ def pipeline_fetch() -> Pipeline:
     steps = [
         Step("fetch_x_profiles", T_fetch_x_profiles.main),
         Step("fetch_tweets",     T_fetch_tweets.main),
+        Step("fetch_bundestag_votes", T_bundestag_votes.main),
     ]
     return Pipeline("fetch", steps)
 
