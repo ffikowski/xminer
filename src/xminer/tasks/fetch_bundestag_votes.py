@@ -87,12 +87,12 @@ UPSERT_SQL = """
 INSERT INTO public.bundestag_votes (
     wahlperiode, sitzungnr, abstimmnr, fraktion_gruppe, name, vorname, titel,
     bezeichnung, ja, nein, enthaltung, ungueltig, nichtabgegeben, bemerkung,
-    vote_title, vote_date, vote_source_url, retrieved_at
+    vote_title, vote_date, vote_source_url, retrieved_at, username
 )
 VALUES (
     :wahlperiode, :sitzungnr, :abstimmnr, :fraktion_gruppe, :name, :vorname, :titel,
     :bezeichnung, :ja, :nein, :enthaltung, :ungueltig, :nichtabgegeben, :bemerkung,
-    :vote_title, :vote_date, :vote_source_url, :retrieved_at
+    :vote_title, :vote_date, :vote_source_url, :retrieved_at, :username
 )
 ON CONFLICT (wahlperiode, sitzungnr, abstimmnr, name, vorname)
 DO UPDATE SET
@@ -108,7 +108,8 @@ DO UPDATE SET
     vote_title = EXCLUDED.vote_title,
     vote_date = EXCLUDED.vote_date,
     vote_source_url = EXCLUDED.vote_source_url,
-    retrieved_at = EXCLUDED.retrieved_at;
+    retrieved_at = EXCLUDED.retrieved_at,
+    username = EXCLUDED.username;
 """
 
 
@@ -354,9 +355,42 @@ def transform_to_db_format(
     # Add retrieved_at timestamp
     df_clean['retrieved_at'] = datetime.now(timezone.utc)
 
+    # Lookup username from politicians table
+    # Try to match on name, vorname (and party for better accuracy)
+    logger.info("Looking up usernames from politicians_12_2025 table...")
+    username_lookup_query = """
+    SELECT
+        LOWER(TRIM(p.nachname)) as name_lower,
+        LOWER(TRIM(COALESCE(p.vorname, ''))) as vorname_lower,
+        p.username
+    FROM politicians_12_2025 p
+    WHERE p.username IS NOT NULL
+    """
+
+    try:
+        username_df = pd.read_sql(text(username_lookup_query), engine)
+
+        # Create lookup keys in both dataframes
+        username_df['lookup_key'] = username_df['name_lower'] + '|' + username_df['vorname_lower']
+        df_clean['lookup_key'] = df_clean['name'].str.lower().str.strip() + '|' + df_clean['vorname'].fillna('').str.lower().str.strip()
+
+        # Merge to get username
+        username_map = username_df.set_index('lookup_key')['username'].to_dict()
+        df_clean['username'] = df_clean['lookup_key'].map(username_map)
+
+        # Drop temporary lookup_key column
+        df_clean = df_clean.drop(columns=['lookup_key'])
+
+        matched_count = df_clean['username'].notna().sum()
+        logger.info(f"Matched {matched_count}/{len(df_clean)} records with usernames ({matched_count/len(df_clean)*100:.1f}%)")
+
+    except Exception as e:
+        logger.warning(f"Could not lookup usernames: {e}")
+        df_clean['username'] = None
+
     # Handle NaN values - replace with None for object columns
     # For object/string columns, we can use .where() to replace NaN with None
-    for col in ['titel', 'bemerkung', 'vorname', 'fraktion_gruppe', 'vote_title', 'vote_source_url', 'bezeichnung']:
+    for col in ['titel', 'bemerkung', 'vorname', 'fraktion_gruppe', 'vote_title', 'vote_source_url', 'bezeichnung', 'username']:
         if col in df_clean.columns:
             df_clean[col] = df_clean[col].where(pd.notna(df_clean[col]), None)
 
