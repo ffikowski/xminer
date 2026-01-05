@@ -204,6 +204,47 @@ def fetch_vote_metadata_from_bundestag(limit: int = 1000) -> Dict[str, Dict]:
         return {}
 
 
+def download_excel_file(url: str, filename: str, output_dir: str) -> Optional[Path]:
+    """
+    Download an Excel file from URL.
+
+    Args:
+        url: URL of the Excel file
+        filename: Filename to save as
+        output_dir: Directory to save file to
+
+    Returns:
+        Path to downloaded file or None if failed
+    """
+    try:
+        output_path = Path(output_dir) / filename
+
+        # Skip if already exists
+        if output_path.exists():
+            logger.debug(f"File already exists: {filename}")
+            return output_path
+
+        logger.info(f"Downloading {filename}...")
+
+        response = requests.get(
+            url,
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=60
+        )
+        response.raise_for_status()
+
+        # Save file
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(response.content)
+
+        logger.info(f"✅ Downloaded {filename} ({len(response.content) / 1024:.1f} KB)")
+        return output_path
+
+    except Exception as e:
+        logger.error(f"Failed to download {filename}: {e}")
+        return None
+
+
 def find_excel_files(directory: str) -> List[Path]:
     """
     Find all Excel files in the specified directory.
@@ -313,15 +354,11 @@ def transform_to_db_format(
     # Add retrieved_at timestamp
     df_clean['retrieved_at'] = datetime.now(timezone.utc)
 
-    # Handle NaN values
-    df_clean = df_clean.fillna({
-        'titel': None,
-        'bemerkung': None,
-        'vorname': None,
-        'fraktion_gruppe': None,
-        'vote_title': None,
-        'vote_source_url': None,
-    })
+    # Handle NaN values - replace with None for object columns
+    # For object/string columns, we can use .where() to replace NaN with None
+    for col in ['titel', 'bemerkung', 'vorname', 'fraktion_gruppe', 'vote_title', 'vote_source_url', 'bezeichnung']:
+        if col in df_clean.columns:
+            df_clean[col] = df_clean[col].where(pd.notna(df_clean[col]), None)
 
     # Convert to list of dicts
     records = df_clean.to_dict('records')
@@ -396,7 +433,24 @@ def main():
     logger.info("Fetching vote metadata from Bundestag website...")
     vote_metadata_map = fetch_vote_metadata_from_bundestag(limit=1000)
 
-    # Find Excel files
+    # Download Excel files from the last year
+    logger.info("Downloading Excel files from the last year...")
+    cutoff_date = datetime.now() - pd.Timedelta(days=365)
+    downloaded_count = 0
+
+    for filename, metadata in vote_metadata_map.items():
+        # Check if vote is from the last year
+        if metadata.get('date'):
+            vote_date = pd.to_datetime(metadata['date'])
+            if vote_date >= cutoff_date:
+                # Download the file
+                result = download_excel_file(metadata['url'], filename, excel_dir)
+                if result:
+                    downloaded_count += 1
+
+    logger.info(f"Downloaded {downloaded_count} new files from the last year")
+
+    # Find Excel files (both new and existing)
     excel_files = find_excel_files(excel_dir)
 
     if not excel_files:

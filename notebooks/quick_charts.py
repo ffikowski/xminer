@@ -35,7 +35,7 @@ def setup_graphics_dir(year, month):
 
     ym = f"{year:04d}{month:02d}"
     base_dir = Path(params.get('graphics_base_dir', '../outputs'))
-    graphics_dir = base_dir / ym / 'graphics'
+    graphics_dir = base_dir / ym / 'graphics' / 'keywords'
     graphics_dir.mkdir(parents=True, exist_ok=True)
 
     return graphics_dir
@@ -75,7 +75,7 @@ def get_party_color(party: str) -> str:
     return PARTY_COLORS.get(normalized, "#888888")
 
 
-def create_keyword_chart(keyword, year, month, output_dir):
+def create_keyword_chart(keyword, year, month, output_dir, start_date="2025-12-01", end_date="2026-01-31"):
     """
     Create bar chart for keyword analysis.
 
@@ -84,6 +84,8 @@ def create_keyword_chart(keyword, year, month, output_dir):
         year: Year to analyze
         month: Month to analyze
         output_dir: Directory to save output
+        start_date: Start date for date range filter (default: 2025-12-01)
+        end_date: End date for date range filter (default: 2026-01-31)
     """
     query = f"""
     SELECT
@@ -93,6 +95,8 @@ def create_keyword_chart(keyword, year, month, output_dir):
     FROM public.tweets t
     JOIN politicians_{month:02d}_{year} p ON t.username = p.username
     WHERE t.text ILIKE '%{keyword}%'
+      AND t.created_at >= '{start_date}'
+      AND t.created_at <= '{end_date}'
     GROUP BY p.partei_kurz
     """
 
@@ -129,7 +133,12 @@ def create_keyword_chart(keyword, year, month, output_dir):
         textfont=dict(color='white', size=14)
     ))
 
-    title = f"Tweets über '{keyword}' nach Partei<br><sub style='font-size:0.85em;'>Erhoben für {month:02d}/{year}</sub>"
+    # Convert dates to German format for display
+    from datetime import datetime
+    start_display = datetime.strptime(start_date, '%Y-%m-%d').strftime('%d.%m.%Y')
+    end_display = datetime.strptime(end_date, '%Y-%m-%d').strftime('%d.%m.%Y')
+
+    title = f"Tweets über '{keyword}' nach Partei<br><sub style='font-size:0.85em;'>Zeitraum: {start_display} - {end_display}</sub>"
 
     fig.update_layout(
         title=dict(text=title, x=0.5, xanchor='center', font=dict(size=22)),
@@ -171,7 +180,7 @@ def create_keyword_chart(keyword, year, month, output_dir):
         )
     ))
 
-    title_pie = f"Verteilung der '{keyword}'-Tweets nach Partei<br><sub style='font-size:0.85em;'>Erhoben für {month:02d}/{year}</sub>"
+    title_pie = f"Verteilung der '{keyword}'-Tweets nach Partei<br><sub style='font-size:0.85em;'>Zeitraum: {start_display} - {end_display}</sub>"
 
     fig_pie.update_layout(
         title=dict(text=title_pie, x=0.5, xanchor='center', font=dict(size=22)),

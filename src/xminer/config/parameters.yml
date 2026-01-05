@@ -1,3 +1,8 @@
+# Root-level settings for notebooks
+year: 2025
+month: 12
+graphics_base_dir: "/Users/margespinderi/Documents/PoliMetrics/xminer/outputs"
+
 common:
   logging:
     file: fetch_x_profiles.log
@@ -69,4 +74,4 @@ export_outputs:
     - "202511/tweets"
     - "202511/profiles"
   local_dest_dir: "C:/Users/felix/Documents/xminer/outputs"
-  graphics_base_dir: "C:/Users/felix/Documents/xminer/outputs"
+  graphics_base_dir: "/Users/margespinderi/Documents/PoliMetrics/xminer/outputs"
