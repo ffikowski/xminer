@@ -142,7 +142,7 @@ def create_keyword_chart(keyword, year, month, output_dir):
         height=max(400, 60 * len(df_agg)),
         xaxis=dict(gridcolor='#333333'),
         yaxis=dict(gridcolor='#333333', tickfont=dict(size=16))
-    ))
+    )
 
     # Save
     output_file = output_dir / f"{keyword.lower()}_tweets_by_party.png"
@@ -151,6 +151,47 @@ def create_keyword_chart(keyword, year, month, output_dir):
     print(f"✅ Created: {output_file.name}")
     print(f"   Total tweets: {df_agg['tweet_count'].sum():,}")
     print(f"   Parties: {', '.join(df_agg['party_norm'].tolist())}\n")
+
+    # Also create pie chart
+    df_pie = df_agg.sort_values('tweet_count', ascending=False)
+    pie_colors = [get_party_color(p) for p in df_pie['party_norm']]
+
+    fig_pie = go.Figure()
+    fig_pie.add_trace(go.Pie(
+        labels=df_pie['party_norm'],
+        values=df_pie['tweet_count'],
+        marker=dict(colors=pie_colors),
+        textinfo='label+percent',
+        textfont=dict(size=14, color='white'),
+        hovertemplate=(
+            "<b>%{label}</b><br>"
+            "Tweets: %{value:,.0f}<br>"
+            "Anteil: %{percent}<br>"
+            "<extra></extra>"
+        )
+    ))
+
+    title_pie = f"Verteilung der '{keyword}'-Tweets nach Partei<br><sub style='font-size:0.85em;'>Erhoben für {month:02d}/{year}</sub>"
+
+    fig_pie.update_layout(
+        title=dict(text=title_pie, x=0.5, xanchor='center', font=dict(size=22)),
+        paper_bgcolor='#1a1a1a',
+        font=dict(color='white'),
+        margin=dict(l=20, r=20, t=100, b=20),
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="middle",
+            y=0.5,
+            xanchor="left",
+            x=1.02,
+            bgcolor='rgba(0,0,0,0.5)'
+        )
+    )
+
+    output_file_pie = output_dir / f"{keyword.lower()}_distribution_pie.png"
+    fig_pie.write_image(output_file_pie, width=1080, height=1080, scale=2)
+    print(f"✅ Created pie chart: {output_file_pie.name}\n")
 
     return fig
 
@@ -219,7 +260,7 @@ def create_top_trends_chart(year, month, output_dir, top_n=15):
         height=max(500, 40 * len(df)),
         xaxis=dict(gridcolor='#333333'),
         yaxis=dict(gridcolor='#333333')
-    ))
+    )
 
     # Save
     output_file = output_dir / f"top_{top_n}_trends.png"
