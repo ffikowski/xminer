@@ -63,6 +63,9 @@ fetch_bundestag_votes:
   load_to_db: true
   store_csv: false
 
+bundestag_2025_results:
+  data_dir: "data/bundestag_2025"  # Directory for 2025 election results CSV files
+
 export_outputs:
   ssh_host: 145.223.101.94
   ssh_user: app
