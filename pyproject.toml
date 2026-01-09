@@ -26,7 +26,8 @@ dependencies = [
     "plotly",
     "openpyxl",
     "requests",
-    "beautifulsoup4"
+    "beautifulsoup4",
+    "geopy>=2.4.0"
 ]
 
 [tool.setuptools]

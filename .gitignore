@@ -9,3 +9,7 @@ secrets.txt
 Textdokument (neu).txt
 project_structure.txt
 *.egg-info/
+
+# Jupyter notebook execution outputs
+*_executed.ipynb
+.ipynb_checkpoints/

@@ -6,6 +6,7 @@ import numpy as np
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Tuple
 from sqlalchemy import text, bindparam, BigInteger, Text, JSON
+from psycopg2.extras import Json
 
 # ---- tiny coercers ----
 def to_int_or_none(v: Any) -> int | None:
@@ -26,10 +27,10 @@ def to_json_obj(v: Any):
     if v in (None, "", "null"):
         return None
     if isinstance(v, (dict, list)):
-        return v
+        return Json(v)  # Wrap with psycopg2.extras.Json for JSONB compatibility
     if isinstance(v, str):
         try:
-            return json.loads(v)
+            return Json(json.loads(v))
         except Exception:
             return None
     return None

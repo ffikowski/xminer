@@ -7,13 +7,31 @@ load_dotenv()
 
 class Config:
     DATABASE_URL = os.getenv("DATABASE_URL")
+
+    # Official Twitter API
     X_BEARER_TOKEN = os.getenv("X_BEARER_TOKEN")
+
+    # TwitterAPI.io credentials
+    TWITTERAPIIO_API_KEY = os.getenv("twitterapiio_API_KEY")
+    TWITTERAPIIO_USER_ID = os.getenv("twitterapiio_User_ID")
+
+    # API mode: "official" or "twitterapiio"
+    X_API_MODE = os.getenv("X_API_MODE", "official")
+
     ENV = os.getenv("ENV", "dev")
 
     @staticmethod
     def validate():
-        missing = [k for k in ("DATABASE_URL", "X_BEARER_TOKEN") if not getattr(Config, k)]
-        if missing:
-            raise RuntimeError(f"Missing required env vars: {', '.join(missing)}")
+        # Always require DATABASE_URL
+        if not Config.DATABASE_URL:
+            raise RuntimeError("Missing required env var: DATABASE_URL")
+
+        # Validate based on API mode
+        if Config.X_API_MODE == "twitterapiio":
+            if not Config.TWITTERAPIIO_API_KEY:
+                raise RuntimeError("twitterapiio_API_KEY required when X_API_MODE=twitterapiio")
+        else:
+            if not Config.X_BEARER_TOKEN:
+                raise RuntimeError("X_BEARER_TOKEN required when X_API_MODE=official")
 
 Config.validate()
