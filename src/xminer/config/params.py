@@ -87,6 +87,7 @@ class Params:
                                              "entities","referenced_tweets"])
     rate_limit_fallback_sleep = _get_int("fetch_tweets.rate_limit_fallback_sleep", "rate_limit_fallback_sleep", default=901)
     skip_fetch_date     = _get_dt_utc("fetch_tweets.skip_fetch_date", "skip_fetch_date", default=None)
+    last_fetch_date     = _get("fetch_tweets.last_fetch_date", "last_fetch_date", default=None)
 
     # ----- trends -----
     trends_woeid      = _get_int("fetch_x_trends.trends_woeid", "trends_woeid", default=23424829)

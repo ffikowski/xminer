@@ -26,6 +26,10 @@ fetch_tweets:
   sample_seed: 42
   tweets_since: "2025-10-01"
 
+  # Last successful fetch date - used by backfill to check for gaps
+  # Update this after each successful fetch run
+  last_fetch_date: "2026-01-09"
+
   # schema helpers used by metrics
   id_cols:
     - author_id
