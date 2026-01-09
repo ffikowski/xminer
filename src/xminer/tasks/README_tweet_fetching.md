@@ -181,6 +181,64 @@ Key columns:
 - `public_metrics` (like_count, reply_count, etc.)
 - `retrieved_at`
 
+## Automated Fetching (Cron Job)
+
+### Setup on VPS
+
+1. **Copy the cron script** to the VPS:
+   ```bash
+   scp scripts/fetch_tweets_cron.sh app@145.223.101.94:/home/app/apps/xminer/scripts/
+   ```
+
+2. **Make it executable**:
+   ```bash
+   chmod +x /home/app/apps/xminer/scripts/fetch_tweets_cron.sh
+   ```
+
+3. **Add to crontab**:
+   ```bash
+   crontab -e
+   ```
+
+4. **Add one of these schedules**:
+   ```bash
+   # Every 6 hours
+   0 */6 * * * /home/app/apps/xminer/scripts/fetch_tweets_cron.sh >> /home/app/apps/xminer/logs/cron.log 2>&1
+
+   # Daily at 2 AM
+   0 2 * * * /home/app/apps/xminer/scripts/fetch_tweets_cron.sh >> /home/app/apps/xminer/logs/cron.log 2>&1
+
+   # Twice daily (6 AM and 6 PM)
+   0 6,18 * * * /home/app/apps/xminer/scripts/fetch_tweets_cron.sh >> /home/app/apps/xminer/logs/cron.log 2>&1
+   ```
+
+### What the Cron Script Does
+
+1. Activates the virtual environment
+2. Runs the main tweet fetch (`fetch_tweets_jan2026_test`)
+3. Fills any gaps (`backfill_tweets fill-gaps`)
+4. Updates `last_fetch_date` in `parameters.yml`
+5. Logs a summary of total tweets
+
+### Monitoring
+
+View cron logs:
+```bash
+tail -f /home/app/apps/xminer/logs/cron.log
+```
+
+Check cron job is running:
+```bash
+crontab -l
+```
+
+### Manual Run
+
+Test the script manually:
+```bash
+/home/app/apps/xminer/scripts/fetch_tweets_cron.sh
+```
+
 ## Troubleshooting
 
 ### No tweets found for an author
