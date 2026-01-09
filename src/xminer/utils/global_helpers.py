@@ -24,13 +24,20 @@ def to_int_or_none(v: Any) -> int | None:
         return None
 
 def to_json_obj(v: Any):
+    """Convert value to JSON-serializable format for SQLAlchemy JSON columns.
+
+    Returns plain dict/list - SQLAlchemy's JSON() type handles serialization.
+    """
     if v in (None, "", "null"):
         return None
+    # Already wrapped in Json - extract the adapted value
+    if isinstance(v, Json):
+        return v.adapted
     if isinstance(v, (dict, list)):
-        return Json(v)  # Wrap with psycopg2.extras.Json for JSONB compatibility
+        return v  # Return plain dict/list - SQLAlchemy JSON type handles it
     if isinstance(v, str):
         try:
-            return Json(json.loads(v))
+            return json.loads(v)
         except Exception:
             return None
     return None
