@@ -372,3 +372,77 @@ To use a different buffer (e.g., 48 hours for more accurate metrics):
 ### Rate limiting
 - The TwitterAPI.io client handles pagination automatically
 - Rate limits are handled with exponential backoff
+
+## Trends Visualization (Daily Job)
+
+Generate visualizations showing how political parties engage with trending topics.
+
+### Manual Run
+
+```bash
+# Generate visualizations for top 5 trends
+python -m xminer.tasks.generate_trends_viz
+
+# Limit to top 3 trends
+python -m xminer.tasks.generate_trends_viz --limit 3
+
+# Analyze a specific trend
+python -m xminer.tasks.generate_trends_viz --trend "#Schnee"
+
+# Dry run (preview what would be generated)
+python -m xminer.tasks.generate_trends_viz --dry-run
+```
+
+### Output
+
+Visualizations are saved to `outputs/{YYYYMM}/graphics/trends/`:
+- `{trend_name}_tweets_de.png` / `{trend_name}_tweets_en.png` - Tweet count by party
+- `{trend_name}_impressions_de.png` / `{trend_name}_impressions_en.png` - Impressions by party
+- `trends_overview_de.png` / `trends_overview_en.png` - Multi-trend comparison
+
+### Daily Cron Job Setup
+
+1. **Copy the cron script** to the VPS:
+   ```bash
+   scp scripts/generate_trends_viz_cron.sh app@145.223.101.94:/home/app/apps/xminer/scripts/
+   ```
+
+2. **Make it executable**:
+   ```bash
+   chmod +x /home/app/apps/xminer/scripts/generate_trends_viz_cron.sh
+   ```
+
+3. **Add to crontab** (daily at 8 AM):
+   ```bash
+   crontab -e
+   ```
+
+   Add:
+   ```
+   0 8 * * * /home/app/apps/xminer/scripts/generate_trends_viz_cron.sh >> /home/app/apps/xminer/logs/trends_viz_cron.log 2>&1
+   ```
+
+### Cron Script Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TRENDS_LIMIT` | 5 | Number of top trends to analyze |
+
+Example with custom limit:
+```bash
+0 8 * * * TRENDS_LIMIT=10 /home/app/apps/xminer/scripts/generate_trends_viz_cron.sh >> /home/app/apps/xminer/logs/trends_viz_cron.log 2>&1
+```
+
+### What the Cron Script Does
+
+1. Fetches current trends from TwitterAPI.io
+2. Saves trends to `x_trends` table
+3. Generates bilingual visualizations (DE + EN) for top N trends
+4. Logs summary of generated files
+
+### Monitoring
+
+View cron logs:
+```bash
+tail -f /home/app/apps/xminer/logs/trends_viz_cron.log
+```
