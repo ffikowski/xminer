@@ -21,11 +21,16 @@ fetch_tweets:
 
 ### 1. Regular Tweet Fetch
 
-Run your regular tweet fetch script (e.g., `fetch_tweets_jan2026_test.py`):
+Run the main tweet fetch script:
 
 ```bash
-python -m xminer.tasks.fetch_tweets_jan2026_test
+python -m xminer.tasks.fetch_tweets
 ```
+
+Options:
+- `--limit N` - Limit to N profiles
+- `--dry-run` - Preview without saving to database
+- `--author USERNAME` - Fetch only for specific username
 
 ### 2. Fill Gaps
 
@@ -92,8 +97,8 @@ python -m xminer.tasks.backfill_tweets historical --dry-run
 
 | File | Description |
 |------|-------------|
-| `backfill_tweets.py` | Main backfill script with `fill-gaps` and `historical` commands |
-| `fetch_tweets_jan2026_test.py` | Test script for fetching new tweets |
+| `fetch_tweets.py` | Main script for fetching new tweets (uses dual API client) |
+| `backfill_tweets.py` | Backfill script with `fill-gaps` and `historical` commands |
 | `fetch_missing_authors.py` | Script to fetch tweets for potentially missing authors |
 | `verify_tweet_completeness.py` | Script to verify tweet data completeness |
 
@@ -183,6 +188,18 @@ Key columns:
 
 ## Automated Fetching (Cron Job)
 
+### Buffer for Engagement Metrics
+
+The script supports a **buffer period** (default: 24 hours) to allow engagement metrics (likes, impressions, retweets) to settle before fetching. This gives tweets time to accumulate their full engagement counts.
+
+```bash
+# Fetch tweets that are at least 24 hours old
+python -m xminer.tasks.fetch_tweets --buffer-hours 24
+
+# Fetch tweets that are at least 48 hours old (more accurate metrics)
+python -m xminer.tasks.fetch_tweets --buffer-hours 48
+```
+
 ### Setup on VPS
 
 1. **Copy the cron script** to the VPS:
@@ -202,22 +219,31 @@ Key columns:
 
 4. **Add one of these schedules**:
    ```bash
-   # Every 6 hours
-   0 */6 * * * /home/app/apps/xminer/scripts/fetch_tweets_cron.sh >> /home/app/apps/xminer/logs/cron.log 2>&1
+   # RECOMMENDED: Weekly on Sunday at 3 AM (with 24h buffer)
+   0 3 * * 0 /home/app/apps/xminer/scripts/fetch_tweets_cron.sh >> /home/app/apps/xminer/logs/cron.log 2>&1
 
-   # Daily at 2 AM
+   # Daily at 2 AM (with 24h buffer)
    0 2 * * * /home/app/apps/xminer/scripts/fetch_tweets_cron.sh >> /home/app/apps/xminer/logs/cron.log 2>&1
 
-   # Twice daily (6 AM and 6 PM)
-   0 6,18 * * * /home/app/apps/xminer/scripts/fetch_tweets_cron.sh >> /home/app/apps/xminer/logs/cron.log 2>&1
+   # Custom buffer (e.g., 48 hours) - set BUFFER_HOURS environment variable
+   0 3 * * 0 BUFFER_HOURS=48 /home/app/apps/xminer/scripts/fetch_tweets_cron.sh >> /home/app/apps/xminer/logs/cron.log 2>&1
    ```
+
+### Cron Schedule Reference
+
+| Schedule | Cron Expression | Description |
+|----------|-----------------|-------------|
+| Weekly (Sunday 3 AM) | `0 3 * * 0` | Recommended for weekly analysis |
+| Weekly (Monday 6 AM) | `0 6 * * 1` | Start of week |
+| Daily (2 AM) | `0 2 * * *` | For more frequent updates |
+| Twice weekly (Sun/Wed) | `0 3 * * 0,3` | Mid-week refresh |
 
 ### What the Cron Script Does
 
 1. Activates the virtual environment
-2. Runs the main tweet fetch (`fetch_tweets_jan2026_test`)
+2. Runs the main tweet fetch with buffer (`fetch_tweets --buffer-hours 24`)
 3. Fills any gaps (`backfill_tweets fill-gaps`)
-4. Updates `last_fetch_date` in `parameters.yml`
+4. Updates `last_fetch_date` in `parameters.yml` (to buffer date)
 5. Logs a summary of total tweets
 
 ### Monitoring
@@ -237,6 +263,99 @@ crontab -l
 Test the script manually:
 ```bash
 /home/app/apps/xminer/scripts/fetch_tweets_cron.sh
+```
+
+## Deployment Guide
+
+### Step 1: Copy Files to VPS
+
+From your local machine (in the xminer project directory):
+
+```bash
+# Copy the cron script
+scp scripts/fetch_tweets_cron.sh app@145.223.101.94:/home/app/apps/xminer/scripts/
+
+# Copy the updated fetch_tweets.py (with --buffer-hours support)
+scp src/xminer/tasks/fetch_tweets.py app@145.223.101.94:/home/app/apps/xminer/src/xminer/tasks/
+```
+
+### Step 2: SSH into VPS
+
+```bash
+ssh app@145.223.101.94
+```
+
+### Step 3: Make Script Executable
+
+```bash
+chmod +x /home/app/apps/xminer/scripts/fetch_tweets_cron.sh
+```
+
+### Step 4: Test the Script
+
+```bash
+# First, test with a dry-run on 1 profile
+cd /home/app/apps/xminer
+source .venv/bin/activate
+python -m xminer.tasks.fetch_tweets --buffer-hours 24 --limit 1 --dry-run
+
+# If that works, run the full cron script
+/home/app/apps/xminer/scripts/fetch_tweets_cron.sh
+```
+
+### Step 5: Add to Crontab
+
+```bash
+crontab -e
+```
+
+Add the weekly schedule (Sunday 3 AM with 24h buffer):
+```
+0 3 * * 0 /home/app/apps/xminer/scripts/fetch_tweets_cron.sh >> /home/app/apps/xminer/logs/cron.log 2>&1
+```
+
+### Step 6: Verify Setup
+
+```bash
+# Check cron is configured
+crontab -l
+
+# Watch logs (after next run)
+tail -f /home/app/apps/xminer/logs/cron.log
+```
+
+### Quick One-Liner Deployment
+
+Run this from your local machine to deploy and set up everything:
+
+```bash
+ssh app@145.223.101.94 << 'EOF'
+cd /home/app/apps/xminer
+chmod +x scripts/fetch_tweets_cron.sh
+mkdir -p logs
+
+# Test the script
+echo "Testing script..."
+./scripts/fetch_tweets_cron.sh
+
+# Add to crontab (weekly Sunday 3 AM)
+(crontab -l 2>/dev/null | grep -v "fetch_tweets_cron"; echo "0 3 * * 0 /home/app/apps/xminer/scripts/fetch_tweets_cron.sh >> /home/app/apps/xminer/logs/cron.log 2>&1") | crontab -
+
+echo "Cron job installed:"
+crontab -l
+EOF
+```
+
+### Customizing the Buffer
+
+To use a different buffer (e.g., 48 hours for more accurate metrics):
+
+```bash
+# Option 1: Set in crontab
+0 3 * * 0 BUFFER_HOURS=48 /home/app/apps/xminer/scripts/fetch_tweets_cron.sh >> /home/app/apps/xminer/logs/cron.log 2>&1
+
+# Option 2: Edit the script default
+# Change BUFFER_HOURS=${BUFFER_HOURS:-24} to BUFFER_HOURS=${BUFFER_HOURS:-48}
 ```
 
 ## Troubleshooting

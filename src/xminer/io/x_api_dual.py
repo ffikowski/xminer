@@ -48,6 +48,43 @@ class TwitterAPIIOClient:
 
         return TwitterAPIIOResponse(response.json(), since_id=since_id, start_time=start_time)
 
+    def get_trends(self, woeid: int, count: int = 30) -> List[Dict[str, Any]]:
+        """
+        Fetch trends by WOEID using TwitterAPI.io.
+
+        Args:
+            woeid: The WOEID of the location (e.g., 23424829 for Germany)
+            count: Number of trends to return (min 30)
+
+        Returns:
+            List of trend dicts with keys: trend_name, query, rank, meta_description
+        """
+        url = f"{self.BASE_URL}/twitter/trends"
+        params = {"woeid": woeid}
+        if count > 30:
+            params["count"] = count
+
+        response = requests.get(url, headers=self.headers, params=params)
+        response.raise_for_status()
+
+        data = response.json()
+        if data.get("status") != "success":
+            raise Exception(f"Trends API error: {data.get('msg', 'Unknown error')}")
+
+        trends = data.get("trends", [])
+        # Normalize to consistent format
+        # Response format: {"trends": [{"trend": {"name": "...", "rank": 1, "meta_description": "684K posts"}}]}
+        result = []
+        for item in trends:
+            t = item.get("trend", item)  # Handle nested 'trend' object
+            result.append({
+                "trend_name": t.get("name"),
+                "query": t.get("target", {}).get("query"),
+                "rank": t.get("rank"),
+                "meta_description": t.get("meta_description"),  # Usually contains tweet count like "684K posts"
+            })
+        return result
+
 class TwitterAPIIOResponse(tweepy.Response):
     """Wrapper to make twitterapi.io response compatible with tweepy"""
 
@@ -191,6 +228,41 @@ class DualAPIClient:
             return MockUser()
         else:
             return self.client.get_me()
+
+    def get_trends(self, woeid: int, count: int = 30, bearer_token: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Get trends by WOEID - works with both APIs.
+
+        Args:
+            woeid: The WOEID of the location
+            count: Number of trends to return
+            bearer_token: Bearer token for official API (ignored for twitterapiio)
+
+        Returns:
+            List of trend dicts with keys: trend_name, tweet_count, rank
+        """
+        if self.mode == "twitterapiio":
+            return self.client.get_trends(woeid, count)
+        else:
+            # Official Twitter API v2 trends endpoint
+            import requests
+            url = f"https://api.x.com/2/trends/by/woeid/{woeid}"
+            token = bearer_token or Config.X_BEARER_TOKEN
+            headers = {"Authorization": f"Bearer {token}"}
+            response = requests.get(url, headers=headers, timeout=30)
+            response.raise_for_status()
+            payload = response.json() or {}
+            data = payload.get("data") or []
+            # Normalize to same format as twitterapiio
+            result = []
+            for idx, t in enumerate(data, start=1):
+                result.append({
+                    "trend_name": t.get("trend_name"),
+                    "tweet_count": t.get("tweet_count"),
+                    "rank": idx,
+                    "meta_description": None,
+                })
+            return result
 
 # Create the global client instance
 client = DualAPIClient()
