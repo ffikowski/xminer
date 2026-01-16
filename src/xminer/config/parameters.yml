@@ -61,7 +61,7 @@ export_outputs:
 
   remote_base_dir: "/home/app/apps/xminer/output"
   export_patterns:
-    - "202511/tweets"
-    - "202511/profiles"
+    - "202512/tweets"
+    - "202512/profiles"
   local_dest_dir: "C:/Users/felix/Documents/xminer/outputs"
   graphics_base_dir: "C:/Users/felix/Documents/xminer/outputs"
