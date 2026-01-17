@@ -216,7 +216,10 @@ def create_trend_bar_chart(
     language: str = 'de',
     output_path: Optional[Path] = None
 ) -> None:
-    """Create horizontal bar chart showing party engagement with a trend using matplotlib."""
+    """Create horizontal bar chart showing party engagement with a trend using matplotlib.
+
+    Mobile/Social media optimized: 1080x1080px square format with large text.
+    """
     df_sorted = df.sort_values(metric, ascending=True).copy()
 
     colors = [get_party_color(party) for party in df_sorted['party_norm']]
@@ -243,22 +246,22 @@ def create_trend_bar_chart(
 
     metric_label = metric_labels.get(metric, metric)
 
-    # Create figure with white background
-    fig, ax = plt.subplots(figsize=(10, max(4, 0.8 * len(df_sorted))))
+    # Mobile-friendly square format (1080x1080px at 150dpi = 7.2x7.2 inches)
+    fig, ax = plt.subplots(figsize=(7.2, 7.2))
     fig.patch.set_facecolor('white')
     ax.set_facecolor('white')
 
-    # Create horizontal bars
+    # Create horizontal bars - thicker for mobile visibility
     bars = ax.barh(
         df_sorted['party_norm'],
         df_sorted[metric],
         color=colors,
         edgecolor='white',
-        linewidth=0.5,
-        height=0.7
+        linewidth=1,
+        height=0.65
     )
 
-    # Add value labels on bars
+    # Add value labels on bars - larger for mobile
     max_val = df_sorted[metric].max()
     for bar, val in zip(bars, df_sorted[metric]):
         # Put label inside if bar is long enough, otherwise outside
@@ -268,7 +271,7 @@ def create_trend_bar_chart(
                 bar.get_y() + bar.get_height() / 2,
                 format_number(val),
                 va='center', ha='right',
-                fontsize=12, fontweight='bold',
+                fontsize=18, fontweight='bold',
                 color='white'
             )
         else:
@@ -277,38 +280,40 @@ def create_trend_bar_chart(
                 bar.get_y() + bar.get_height() / 2,
                 format_number(val),
                 va='center', ha='left',
-                fontsize=12, fontweight='bold',
+                fontsize=18, fontweight='bold',
                 color='#333333'
             )
 
-    # Styling - larger, bolder text for visibility
-    ax.set_xlabel(metric_label, fontsize=14, fontweight='bold', color='#1a1a1a')
-    ax.set_title(title, fontsize=18, fontweight='bold', color='#1a1a1a', pad=15)
+    # Styling - extra large text for mobile visibility
+    ax.set_xlabel(metric_label, fontsize=20, fontweight='bold', color='#1a1a1a', labelpad=15)
+    ax.set_title(title, fontsize=26, fontweight='bold', color='#1a1a1a', pad=20)
 
     # Clean up axes
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_color('#888888')
+    ax.spines['left'].set_linewidth(2)
     ax.spines['bottom'].set_color('#888888')
+    ax.spines['bottom'].set_linewidth(2)
 
-    # Format x-axis for large numbers - larger tick labels
+    # Format x-axis for large numbers - larger tick labels for mobile
     ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: format_number(x)))
-    ax.tick_params(axis='both', colors='#1a1a1a', labelsize=13, width=1.5)
-    ax.tick_params(axis='y', labelsize=14)  # Party names even larger
+    ax.tick_params(axis='both', colors='#1a1a1a', labelsize=16, width=2, length=6)
+    ax.tick_params(axis='y', labelsize=20)  # Party names extra large for mobile
 
     # Light gridlines
-    ax.xaxis.grid(True, linestyle='--', alpha=0.4, color='#888888')
+    ax.xaxis.grid(True, linestyle='--', alpha=0.4, color='#888888', linewidth=1.5)
     ax.set_axisbelow(True)
 
     # Add x-axis padding
     ax.set_xlim(0, max_val * 1.15)
 
-    # Add source text at bottom
-    fig.text(0.99, 0.02, source_text, ha='right', va='bottom',
-             fontsize=10, color='#555555', style='italic')
+    # Add source text at bottom - larger for mobile
+    fig.text(0.95, 0.02, source_text, ha='right', va='bottom',
+             fontsize=14, color='#555555', style='italic')
 
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.12)
+    plt.subplots_adjust(bottom=0.1, top=0.9, left=0.25, right=0.95)
 
     if output_path:
         fig.savefig(output_path, dpi=150, bbox_inches='tight',
@@ -323,7 +328,10 @@ def create_trends_heatmap(
     language: str = 'de',
     output_path: Optional[Path] = None
 ) -> None:
-    """Create heatmap showing trend usage intensity by party using matplotlib."""
+    """Create heatmap showing trend usage intensity by party using matplotlib.
+
+    Mobile/Social media optimized: 1080x1080px square format with large text.
+    """
     import numpy as np
 
     if language == 'de':
@@ -365,29 +373,29 @@ def create_trends_heatmap(
 
     data_array = np.array(data_matrix)
 
-    # Create figure
-    fig, ax = plt.subplots(figsize=(max(8, len(parties) * 1.2), max(4, len(trend_names) * 0.8)))
+    # Mobile-friendly square format (1080x1080px at 150dpi = 7.2x7.2 inches)
+    fig, ax = plt.subplots(figsize=(7.2, 7.2))
     fig.patch.set_facecolor('white')
     ax.set_facecolor('white')
 
     # Create heatmap
     im = ax.imshow(data_array, cmap='YlOrRd', aspect='auto')
 
-    # Add colorbar
-    cbar = ax.figure.colorbar(im, ax=ax, shrink=0.8)
-    cbar.ax.set_ylabel('Tweets', rotation=-90, va="bottom", fontsize=13, fontweight='bold', color='#1a1a1a')
-    cbar.ax.tick_params(colors='#1a1a1a', labelsize=12)
+    # Add colorbar - larger for mobile
+    cbar = ax.figure.colorbar(im, ax=ax, shrink=0.7, pad=0.02)
+    cbar.ax.set_ylabel('Tweets', rotation=-90, va="bottom", fontsize=18, fontweight='bold', color='#1a1a1a')
+    cbar.ax.tick_params(colors='#1a1a1a', labelsize=14, width=2)
 
-    # Set ticks - larger, bolder
+    # Set ticks - extra large for mobile
     ax.set_xticks(range(len(parties)))
     ax.set_yticks(range(len(trend_names)))
-    ax.set_xticklabels(parties, fontsize=13, fontweight='bold', color='#1a1a1a')
-    ax.set_yticklabels(trend_names, fontsize=13, fontweight='bold', color='#1a1a1a')
+    ax.set_xticklabels(parties, fontsize=16, fontweight='bold', color='#1a1a1a')
+    ax.set_yticklabels(trend_names, fontsize=18, fontweight='bold', color='#1a1a1a')
 
     # Rotate x labels for better fit
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
 
-    # Add value annotations
+    # Add value annotations - larger for mobile
     for i in range(len(trend_names)):
         for j in range(len(parties)):
             val = data_array[i, j]
@@ -395,19 +403,19 @@ def create_trends_heatmap(
                 # Use white text for dark cells, black for light cells
                 text_color = 'white' if val > data_array.max() * 0.5 else '#1a1a1a'
                 ax.text(j, i, format_number(val), ha="center", va="center",
-                       color=text_color, fontsize=12, fontweight='bold')
+                       color=text_color, fontsize=16, fontweight='bold')
 
-    # Labels and title - larger, bolder
-    ax.set_xlabel(xaxis_label, fontsize=14, fontweight='bold', color='#1a1a1a')
-    ax.set_ylabel(yaxis_label, fontsize=14, fontweight='bold', color='#1a1a1a')
-    ax.set_title(title, fontsize=18, fontweight='bold', color='#1a1a1a', pad=15)
+    # Labels and title - extra large for mobile
+    ax.set_xlabel(xaxis_label, fontsize=20, fontweight='bold', color='#1a1a1a', labelpad=15)
+    ax.set_ylabel(yaxis_label, fontsize=20, fontweight='bold', color='#1a1a1a', labelpad=15)
+    ax.set_title(title, fontsize=26, fontweight='bold', color='#1a1a1a', pad=20)
 
-    # Add source text
-    fig.text(0.99, 0.02, source_text, ha='right', va='bottom',
-             fontsize=10, color='#555555', style='italic')
+    # Add source text - larger for mobile
+    fig.text(0.95, 0.02, source_text, ha='right', va='bottom',
+             fontsize=14, color='#555555', style='italic')
 
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.15)
+    plt.subplots_adjust(bottom=0.2, top=0.9, left=0.25, right=0.88)
 
     if output_path:
         fig.savefig(output_path, dpi=150, bbox_inches='tight',
@@ -422,7 +430,11 @@ def create_trends_comparison_chart(
     language: str = 'de',
     output_path: Optional[Path] = None
 ) -> None:
-    """Create grouped bar chart comparing multiple trends by party using matplotlib."""
+    """Create grouped bar chart comparing multiple trends by party using matplotlib.
+
+    Mobile/Social media optimized: 1080px wide, height scales with number of trends.
+    Portrait format (4:5 ratio) is ideal for social media feeds.
+    """
     import numpy as np
 
     if language == 'de':
@@ -456,16 +468,21 @@ def create_trends_comparison_chart(
         return
 
     trend_names = [td['trend_name'] for td in valid_trends]
+    num_trends = len(valid_trends)
 
-    # Create figure
-    fig, ax = plt.subplots(figsize=(max(10, len(top_parties) * 2), 6))
+    # Mobile-friendly portrait format - height scales with number of trends
+    # Base: 1080x1080 for 3 trends, add height for more trends
+    # Width fixed at 7.2 inches (1080px at 150dpi)
+    # Height: minimum 7.2 inches, scales up for more trends (better legend/bar spacing)
+    height_inches = max(7.2, 6.0 + num_trends * 0.8)  # Scale height with trend count
+    fig, ax = plt.subplots(figsize=(7.2, height_inches))
     fig.patch.set_facecolor('white')
     ax.set_facecolor('white')
 
     x = np.arange(len(top_parties))
     width = 0.8 / len(valid_trends)  # Dynamic bar width
 
-    # Color palette for trends
+    # Color palette for trends - high contrast for mobile
     trend_colors = ['#2E86AB', '#A23B72', '#F18F01', '#C73E1D', '#3B1F2B', '#95C623']
 
     for i, td in enumerate(valid_trends):
@@ -475,45 +492,47 @@ def create_trends_comparison_chart(
         color = trend_colors[i % len(trend_colors)]
 
         bars = ax.bar(x + offset, values, width * 0.9, label=td['trend_name'],
-                     color=color, edgecolor='white', linewidth=0.5)
+                     color=color, edgecolor='white', linewidth=1)
 
-        # Add value labels on top of bars
+        # Add value labels on top of bars - larger for mobile
         for bar, val in zip(bars, values):
             if val > 0:
                 ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
                        format_number(val), ha='center', va='bottom',
-                       fontsize=10, fontweight='bold', color='#1a1a1a')
+                       fontsize=14, fontweight='bold', color='#1a1a1a')
 
-    # Styling - larger, bolder text
-    ax.set_xlabel(xaxis_label, fontsize=14, fontweight='bold', color='#1a1a1a')
-    ax.set_ylabel(yaxis_label, fontsize=14, fontweight='bold', color='#1a1a1a')
-    ax.set_title(title, fontsize=18, fontweight='bold', color='#1a1a1a', pad=15)
+    # Styling - extra large text for mobile
+    ax.set_xlabel(xaxis_label, fontsize=20, fontweight='bold', color='#1a1a1a', labelpad=15)
+    ax.set_ylabel(yaxis_label, fontsize=20, fontweight='bold', color='#1a1a1a', labelpad=15)
+    ax.set_title(title, fontsize=26, fontweight='bold', color='#1a1a1a', pad=20)
     ax.set_xticks(x)
-    ax.set_xticklabels(top_parties, fontsize=13, fontweight='bold', color='#1a1a1a')
+    ax.set_xticklabels(top_parties, fontsize=16, fontweight='bold', color='#1a1a1a', rotation=30, ha='right')
 
     # Clean up axes
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_color('#888888')
+    ax.spines['left'].set_linewidth(2)
     ax.spines['bottom'].set_color('#888888')
+    ax.spines['bottom'].set_linewidth(2)
 
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: format_number(x)))
-    ax.tick_params(axis='both', colors='#1a1a1a', labelsize=12, width=1.5)
+    ax.tick_params(axis='both', colors='#1a1a1a', labelsize=14, width=2, length=6)
 
     # Light gridlines
-    ax.yaxis.grid(True, linestyle='--', alpha=0.4, color='#888888')
+    ax.yaxis.grid(True, linestyle='--', alpha=0.4, color='#888888', linewidth=1.5)
     ax.set_axisbelow(True)
 
-    # Legend - larger text
+    # Legend - larger for mobile
     ax.legend(loc='upper right', frameon=True, facecolor='white', edgecolor='#888888',
-              fontsize=11, title='Trends', title_fontsize=12)
+              fontsize=14, title='Trends', title_fontsize=16)
 
-    # Add source text
-    fig.text(0.99, 0.02, source_text, ha='right', va='bottom',
-             fontsize=10, color='#555555', style='italic')
+    # Add source text - larger for mobile
+    fig.text(0.95, 0.02, source_text, ha='right', va='bottom',
+             fontsize=14, color='#555555', style='italic')
 
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.15)
+    plt.subplots_adjust(bottom=0.18, top=0.9, left=0.15, right=0.95)
 
     if output_path:
         fig.savefig(output_path, dpi=150, bbox_inches='tight',
@@ -528,7 +547,11 @@ def create_trends_overview_chart(
     language: str = 'de',
     output_path: Optional[Path] = None
 ) -> None:
-    """Create stacked bar overview chart showing all trends by party using matplotlib."""
+    """Create stacked bar overview chart showing all trends by party using matplotlib.
+
+    Mobile/Social media optimized: 1080px wide, height scales with number of trends.
+    Portrait format is ideal for social media feeds.
+    """
     if language == 'de':
         title = "Top Trends nach Partei"
         xaxis_label = "Anzahl Tweets"
@@ -551,6 +574,8 @@ def create_trends_overview_chart(
     if not trend_names:
         return
 
+    num_trends = len(trend_names)
+
     # Define party order (most important first)
     party_order = ['CDU/CSU', 'SPD', 'GRÜNE', 'FDP', 'AFD', 'DIE LINKE.', 'BSW', 'FW', 'SSW']
     parties = [p for p in party_order if p in all_parties]
@@ -564,12 +589,15 @@ def create_trends_overview_chart(
             for party in parties:
                 data[party].append(party_counts.get(party, 0))
 
-    # Create figure
-    fig, ax = plt.subplots(figsize=(10, max(4, 0.6 * len(trend_names))))
+    # Mobile-friendly portrait format - height scales with number of trends
+    # Width fixed at 7.2 inches (1080px at 150dpi)
+    # Height: minimum 7.2 inches, add ~0.8 inch per trend for readability
+    height_inches = max(7.2, 4.0 + num_trends * 1.0)  # More height per trend for horizontal bars
+    fig, ax = plt.subplots(figsize=(7.2, height_inches))
     fig.patch.set_facecolor('white')
     ax.set_facecolor('white')
 
-    # Create stacked horizontal bars
+    # Create stacked horizontal bars - thicker for mobile
     y_pos = range(len(trend_names))
     left = [0] * len(trend_names)
 
@@ -577,38 +605,40 @@ def create_trends_overview_chart(
         values = data[party]
         color = get_party_color(party)
         ax.barh(y_pos, values, left=left, label=party, color=color,
-                edgecolor='white', linewidth=0.5, height=0.7)
+                edgecolor='white', linewidth=1, height=0.6)
         left = [l + v for l, v in zip(left, values)]
 
-    # Styling - larger, bolder text
+    # Styling - extra large text for mobile
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(trend_names, fontsize=13, fontweight='bold', color='#1a1a1a')
-    ax.set_xlabel(xaxis_label, fontsize=14, fontweight='bold', color='#1a1a1a')
-    ax.set_title(title, fontsize=18, fontweight='bold', color='#1a1a1a', pad=15)
+    ax.set_yticklabels(trend_names, fontsize=20, fontweight='bold', color='#1a1a1a')
+    ax.set_xlabel(xaxis_label, fontsize=20, fontweight='bold', color='#1a1a1a', labelpad=15)
+    ax.set_title(title, fontsize=26, fontweight='bold', color='#1a1a1a', pad=20)
 
     # Clean up axes
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_color('#888888')
+    ax.spines['left'].set_linewidth(2)
     ax.spines['bottom'].set_color('#888888')
+    ax.spines['bottom'].set_linewidth(2)
 
     ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, p: format_number(x)))
-    ax.tick_params(axis='both', colors='#1a1a1a', labelsize=12, width=1.5)
+    ax.tick_params(axis='both', colors='#1a1a1a', labelsize=14, width=2, length=6)
 
     # Light gridlines
-    ax.xaxis.grid(True, linestyle='--', alpha=0.4, color='#888888')
+    ax.xaxis.grid(True, linestyle='--', alpha=0.4, color='#888888', linewidth=1.5)
     ax.set_axisbelow(True)
 
-    # Legend below the chart - larger text
-    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15),
-              ncol=min(len(parties), 5), frameon=False, fontsize=11)
+    # Legend below the chart - larger for mobile
+    ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.12),
+              ncol=min(len(parties), 4), frameon=False, fontsize=14)
 
-    # Add source text
-    fig.text(0.99, 0.02, source_text, ha='right', va='bottom',
-             fontsize=10, color='#555555', style='italic')
+    # Add source text - larger for mobile
+    fig.text(0.95, 0.02, source_text, ha='right', va='bottom',
+             fontsize=14, color='#555555', style='italic')
 
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.25)
+    plt.subplots_adjust(bottom=0.22, top=0.9, left=0.3, right=0.95)
 
     if output_path:
         fig.savefig(output_path, dpi=150, bbox_inches='tight',
@@ -818,15 +848,15 @@ def create_party_wordcloud(
     def party_color_func(*args, **kwargs):
         return wc_color
 
-    # Generate word cloud
+    # Generate word cloud - mobile-friendly square format (1080x1080px)
     wc = WordCloud(
-        width=800,
-        height=400,
+        width=1080,
+        height=1080,
         background_color='white',
         color_func=party_color_func,
         max_words=50,
-        min_font_size=10,
-        max_font_size=100,
+        min_font_size=14,
+        max_font_size=150,
         relative_scaling=0.5,
         collocations=False,
     ).generate(filtered_text)
@@ -877,12 +907,53 @@ def create_trend_wordclouds(
         tweets_label = "Tweets"
         source_text = f"Source: X/Twitter • Data: {MONTH:02d}/{YEAR}"
 
-    # Create combined word cloud figure
+    # Store word clouds for combined image
+    party_wordclouds = {}
+
+    # === PART 1: Generate INDIVIDUAL word cloud images per party ===
+    for party in parties_to_plot:
+        party_texts = df_tweets[df_tweets['party_norm'] == party]['text'].tolist()
+        display_color = get_party_color(party)
+        wc = create_party_wordcloud(party, party_texts, trend_name)
+
+        if wc:
+            party_wordclouds[party] = (wc, len(party_texts), display_color)
+
+            # Save individual word cloud image (1080x1080px square)
+            if output_dir:
+                fig_ind, ax_ind = plt.subplots(figsize=(7.2, 7.2))
+                fig_ind.patch.set_facecolor('white')
+                ax_ind.set_facecolor('white')
+                ax_ind.imshow(wc, interpolation='bilinear')
+                ax_ind.axis('off')
+
+                # Title with party name and tweet count
+                ax_ind.set_title(f"{party}\n({len(party_texts)} {tweets_label})",
+                                color=display_color, fontsize=24, fontweight='bold', pad=15)
+
+                # Source text
+                fig_ind.text(0.95, 0.02, source_text, ha='right', va='bottom',
+                            fontsize=12, color='#666666', style='italic')
+
+                plt.tight_layout()
+
+                # Sanitize party name for filename
+                party_safe = party.lower().replace('/', '_').replace(' ', '_')
+                path_ind = output_dir / f"{safe_name}_wordcloud_{party_safe}_{language}.png"
+                fig_ind.savefig(path_ind, dpi=150, bbox_inches='tight',
+                               facecolor='white', edgecolor='none')
+                plt.close(fig_ind)
+                generated += 1
+
+    # === PART 2: Generate COMBINED grid word cloud image ===
     n_parties = len(parties_to_plot)
-    n_cols = min(2, n_parties)
+    n_cols = 2
     n_rows = (n_parties + 1) // 2
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 5 * n_rows), squeeze=False)
+    # Mobile-friendly: 2-column grid, square overall format (7.2x7.2 = 1080x1080 at 150dpi)
+    # For 2-3 rows, adjust height slightly to maintain readability
+    fig_height = 7.2 * (n_rows / 2 + 0.3)  # Scale height based on rows
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(7.2, fig_height), squeeze=False)
     fig.patch.set_facecolor('white')
 
     # Flatten axes (squeeze=False ensures it's always 2D)
@@ -892,19 +963,17 @@ def create_trend_wordclouds(
         ax = axes[idx]
         ax.set_facecolor('white')
 
-        party_texts = df_tweets[df_tweets['party_norm'] == party]['text'].tolist()
-        display_color = get_party_color(party)
-
-        wc = create_party_wordcloud(party, party_texts, trend_name)
-
-        if wc:
+        if party in party_wordclouds:
+            wc, tweet_count, display_color = party_wordclouds[party]
             ax.imshow(wc, interpolation='bilinear')
-            ax.set_title(f"{party}\n({len(party_texts)} {tweets_label})",
-                        color=display_color, fontsize=18, fontweight='bold', pad=10)
+            # Larger font sizes for mobile visibility
+            ax.set_title(f"{party}\n({tweet_count} {tweets_label})",
+                        color=display_color, fontsize=18, fontweight='bold', pad=8)
         else:
+            display_color = get_party_color(party)
             no_words = "Nicht genug Wörter" if language == 'de' else "Not enough words"
             ax.text(0.5, 0.5, f"{no_words}\n{party}",
-                   ha='center', va='center', color='#666666', fontsize=14)
+                   ha='center', va='center', color='#666666', fontsize=16)
             ax.set_title(f"{party}", color=display_color, fontsize=18, fontweight='bold')
 
         ax.axis('off')
@@ -913,19 +982,19 @@ def create_trend_wordclouds(
     for idx in range(n_parties, len(axes)):
         axes[idx].set_visible(False)
 
-    # Main title
+    # Main title - larger for mobile
     if language == 'de':
         main_title = f"Word Clouds: '{trend_name}' nach Partei"
     else:
         main_title = f"Word Clouds: '{trend_name}' by Party"
 
-    fig.suptitle(main_title, fontsize=20, fontweight='bold', color='#1a1a1a', y=1.02)
+    fig.suptitle(main_title, fontsize=24, fontweight='bold', color='#1a1a1a', y=0.98)
 
-    # Source text
-    fig.text(0.99, 0.01, source_text, ha='right', va='bottom',
-             fontsize=9, color='#666666', style='italic')
+    # Source text - larger for mobile
+    fig.text(0.95, 0.02, source_text, ha='right', va='bottom',
+             fontsize=11, color='#666666', style='italic')
 
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
     if output_dir:
         path = output_dir / f"{safe_name}_wordclouds_{language}.png"
