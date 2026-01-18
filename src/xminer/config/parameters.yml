@@ -1,16 +1,11 @@
-# Root-level settings for notebooks
-year: 2026
-month: 1
-graphics_base_dir: "/Users/margespinderi/Documents/PoliMetrics/xminer/outputs"
-
 common:
   logging:
     file: fetch_x_profiles.log
     level: INFO
 
   # Shared period + output defaults used by metrics tasks
-  year: 2026
-  month: 1
+  year: 2025
+  month: 12
   outdir: output
   top_n: 50
 
@@ -81,4 +76,4 @@ export_outputs:
     - "202511/tweets"
     - "202511/profiles"
   local_dest_dir: "C:/Users/felix/Documents/xminer/outputs"
-  graphics_base_dir: "/Users/margespinderi/Documents/PoliMetrics/xminer/outputs"
+  graphics_base_dir: "C:/Users/felix/Documents/xminer/outputs"
