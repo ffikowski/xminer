@@ -17,7 +17,7 @@ class Config:
 
     # API mode: "official" or "twitterapiio"
     # Hardcoded - change here to switch between APIs
-    X_API_MODE = "official"
+    X_API_MODE = "twitterapiio"
 
     ENV = os.getenv("ENV", "dev")
 
