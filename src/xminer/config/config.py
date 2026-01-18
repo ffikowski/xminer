@@ -11,12 +11,13 @@ class Config:
     # Official Twitter API
     X_BEARER_TOKEN = os.getenv("X_BEARER_TOKEN")
 
-    # TwitterAPI.io credentials
-    TWITTERAPIIO_API_KEY = os.getenv("twitterapiio_API_KEY")
-    TWITTERAPIIO_USER_ID = os.getenv("twitterapiio_User_ID")
+    # TwitterAPI.io credentials (check both uppercase and legacy lowercase names)
+    TWITTERAPIIO_API_KEY = os.getenv("TWITTERAPIIO_API_KEY") or os.getenv("twitterapiio_API_KEY")
+    TWITTERAPIIO_USER_ID = os.getenv("TWITTERAPIIO_USER_ID") or os.getenv("twitterapiio_User_ID")
 
     # API mode: "official" or "twitterapiio"
-    X_API_MODE = os.getenv("X_API_MODE", "official")
+    # Hardcoded - change here to switch between APIs
+    X_API_MODE = "twitterapiio"
 
     ENV = os.getenv("ENV", "dev")
 

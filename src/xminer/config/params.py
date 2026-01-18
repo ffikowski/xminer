@@ -93,6 +93,9 @@ class Params:
     trends_woeid      = _get_int("fetch_x_trends.trends_woeid", "trends_woeid", default=23424829)
     trends_place_name = _get("fetch_x_trends.trends_place_name", "trends_place_name", default="Germany")
 
+    # ----- graphics -----
+    graphics_base_dir = _get("graphics_base_dir", default="outputs")
+
     # ----- bundestag votes -----
     bundestag_votes_excel_dir = _get("fetch_bundestag_votes.excel_dir", "excel_dir", default="data/bundestag_votes")
     bundestag_votes_load_to_db = _get_bool("fetch_bundestag_votes.load_to_db", default=True)
