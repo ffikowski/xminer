@@ -1,6 +1,7 @@
 # src/xminer/config.py
 import os
 from dotenv import load_dotenv
+from .params import Params
 
 # load .env next to repo root when process starts
 load_dotenv()
@@ -16,8 +17,7 @@ class Config:
     TWITTERAPIIO_USER_ID = os.getenv("TWITTERAPIIO_USER_ID") or os.getenv("twitterapiio_User_ID")
 
     # API mode: "official" or "twitterapiio"
-    # Hardcoded - change here to switch between APIs
-    X_API_MODE = "twitterapiio"
+    X_API_MODE = Params.x_api_mode
 
     ENV = os.getenv("ENV", "dev")
 

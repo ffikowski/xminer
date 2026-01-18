@@ -3,6 +3,9 @@ common:
     file: fetch_x_profiles.log
     level: INFO
 
+  # API mode: "official" or "twitterapiio"
+  x_api_mode: twitterapiio
+
   # Shared period + output defaults used by metrics tasks
   year: 2025
   month: 12

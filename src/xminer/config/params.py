@@ -70,6 +70,7 @@ class Params:
     month  = _get_int("common.month", "month", default=9)
     outdir = _get("common.outdir", "outdir", default="output")
     top_n  = _get_int("common.top_n", "top_n", default=10)
+    x_api_mode = _get("common.x_api_mode", "x_api_mode", default="twitterapiio")
 
     # ----- fetch_x_profiles -----
     sample_limit = _get_int("fetch_x_profiles.sample_limit", "sample_limit", default=50)
