@@ -28,7 +28,7 @@ fetch_tweets:
 
   # Last successful fetch date - used by backfill to check for gaps
   # Update this after each successful fetch run
-  last_fetch_date: "2026-01-09"
+  last_fetch_date: "2026-01-17"
 
   # schema helpers used by metrics
   id_cols:

@@ -130,7 +130,7 @@ def fetch_tweets_for_author(
     since_id: Optional[str] = None,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
-    max_pages: int = 5
+    max_pages: int = 15  # Increased from 5 to handle prolific tweeters
 ) -> List[Dict]:
     """
     Fetch tweets for an author.
